@@ -6,5 +6,7 @@ langchain-core
 requests
 torch
 diffusers
+transformers
+accelerate
 pyngrok
 waitress
