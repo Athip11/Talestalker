@@ -1,5 +1,5 @@
 from game.config import EPISODES, get_ending
-from game.fon    import call_fon
+from game.character    import call_fon
 
 MOOD_SCORE = {'warm': 1, 'touched': 2, 'neutral': 0, 'cold': -1}
 
