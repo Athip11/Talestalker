@@ -21,7 +21,7 @@ pipe = StableDiffusionPipeline.from_pretrained(
     safety_checker=None,
     requires_safety_checker=False
 )
-pipe = pipe.to("cuda")
+pipe = pipe.to("xpu") # NVIDIA: cuda | INTEL: xpu
 pipe.enable_attention_slicing()
 print("✅ Model ready!")
 
