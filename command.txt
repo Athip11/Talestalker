@@ -1,0 +1,2 @@
+python bg_server.py
+python app.py
