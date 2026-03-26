@@ -1,0 +1,118 @@
+{
+  "Version": 3,
+  "Meta": {
+    "Duration": 4.0,
+    "Fps": 30.0,
+    "Loop": true,
+    "AreBeziersRestricted": false,
+    "CurveCount": 18,
+    "TotalSegmentCount": 62,
+    "TotalPointCount": 62,
+    "UserDataCount": 0,
+    "TotalUserDataSize": 0
+  },
+  "Curves": [
+    {
+      "Target": "Parameter",
+      "Id": "Param33",
+      "Segments": [0.0, 1.0, 0, 4.0, 1.0, 0]
+    },
+    {
+      "Target": "Parameter",
+      "Id": "Param34",
+      "Segments": [0.0, 0.0, 0, 4.0, 0.0, 0]
+    },
+    {
+      "Target": "Parameter",
+      "Id": "Param32",
+      "Segments": [0.0, 0.0, 0, 4.0, 0.0, 0]
+    },
+    {
+      "Target": "Parameter",
+      "Id": "ParamAngleX",
+      "Segments": [
+        0.0, 0.0, 0, 1.0, 2.0, 0, 2.0, 0.0, 0, 3.0, -2.0, 0, 4.0, 0.0, 0
+      ]
+    },
+    {
+      "Target": "Parameter",
+      "Id": "ParamAngleY",
+      "Segments": [0.0, -4.0, 0, 2.0, -4.0, 0, 4.0, -4.0, 0]
+    },
+    {
+      "Target": "Parameter",
+      "Id": "ParamAngleZ",
+      "Segments": [0.0, 0.0, 0, 2.0, 0.8, 0, 4.0, 0.0, 0]
+    },
+    {
+      "Target": "Parameter",
+      "Id": "ParamBodyAngleX",
+      "Segments": [
+        0.0, 0.0, 0, 1.0, 1.0, 0, 2.0, 0.0, 0, 3.0, -1.0, 0, 4.0, 0.0, 0
+      ]
+    },
+    {
+      "Target": "Parameter",
+      "Id": "ParamBodyAngleY",
+      "Segments": [
+        0.0, 0.0, 0, 1.0, 1.5, 0, 2.0, 0.0, 0, 3.0, -1.5, 0, 4.0, 0.0, 0
+      ]
+    },
+    {
+      "Target": "Parameter",
+      "Id": "ParamBodyAngleZ",
+      "Segments": [0.0, 0.0, 0, 2.0, 0.4, 0, 4.0, 0.0, 0]
+    },
+    {
+      "Target": "Parameter",
+      "Id": "ParamBreath",
+      "Segments": [0.0, 0.0, 0, 1.8, 1.0, 0, 3.5, 0.0, 0, 4.0, 0.3, 0]
+    },
+    {
+      "Target": "Parameter",
+      "Id": "ParamEyeLOpen",
+      "Segments": [
+        0.0, 1.0, 0, 1.5, 1.0, 0, 1.6, 0.0, 0, 1.75, 1.0, 0, 3.2, 1.0, 0, 3.3,
+        0.0, 0, 3.45, 1.0, 0, 4.0, 1.0, 0
+      ]
+    },
+    {
+      "Target": "Parameter",
+      "Id": "ParamEyeROpen",
+      "Segments": [
+        0.0, 1.0, 0, 1.5, 1.0, 0, 1.6, 0.0, 0, 1.75, 1.0, 0, 3.2, 1.0, 0, 3.3,
+        0.0, 0, 3.45, 1.0, 0, 4.0, 1.0, 0
+      ]
+    },
+    {
+      "Target": "Parameter",
+      "Id": "ParamEyeLSmile",
+      "Segments": [0.0, 0.0, 0, 4.0, 0.0, 0]
+    },
+    {
+      "Target": "Parameter",
+      "Id": "ParamEyeRSmile",
+      "Segments": [0.0, 0.0, 0, 4.0, 0.0, 0]
+    },
+    {
+      "Target": "Parameter",
+      "Id": "ParamMouthForm",
+      "Segments": [0.0, -1.0, 0, 4.0, -1.0, 0]
+    },
+    {
+      "Target": "Parameter",
+      "Id": "ParamMouthOpenY",
+      "Segments": [0.0, 0.0, 0, 4.0, 0.0, 0]
+    },
+    {
+      "Target": "Parameter",
+      "Id": "ParamBrowLAngle2",
+      "Segments": [0.0, 0.0, 0, 4.0, 0.0, 0]
+    },
+    {
+      "Target": "Parameter",
+      "Id": "ParamBrowRAngle",
+      "Segments": [0.0, 0.0, 0, 4.0, 0.0, 0]
+    }
+  ]
+}

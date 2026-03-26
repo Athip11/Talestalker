@@ -1,0 +1,655 @@
+<!doctype html>
+<html lang="th">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
+    <title>ฝน · Rain Visual Novel</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Sarabun:ital,wght@0,300;0,400;0,600;1,300&family=Noto+Serif+Thai:wght@300;400;600&family=Playfair+Display:ital@1&display=swap"
+      rel="stylesheet"
+    />
+
+    <style>
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      :root {
+        --ap: #f9a8d4;
+        --tp: #93c5fd;
+        --rain: #6b9fd4;
+        --text: #e8e4de;
+        --dim: rgba(232, 228, 222, 0.55);
+        --panel-bg: rgba(0, 0, 0, 0.52);
+        --panel-border: rgba(255, 255, 255, 0.1);
+      }
+
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: #070d18;
+        font-family: "Sarabun", sans-serif;
+        color: var(--text);
+      }
+
+      /* ── Landscape warning ── */
+      #landscape-block {
+        display: none;
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        background: #070d18;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
+        color: rgba(255, 255, 255, 0.3);
+        font-size: 0.85rem;
+        letter-spacing: 0.1em;
+      }
+      @media (orientation: landscape) and (max-height: 520px) {
+        #landscape-block {
+          display: flex;
+        }
+        #game-root,
+        #loading-overlay {
+          display: none !important;
+        }
+      }
+
+      /* ══ ROOT ══ */
+      #game-root {
+        position: relative;
+        width: 100%;
+        height: 100dvh;
+        max-width: 480px;
+        margin: 0 auto;
+        overflow: hidden;
+        transition: opacity 0.7s ease;
+      }
+
+      /* ── Background ── */
+      #game-bg {
+        position: absolute;
+        inset: 0;
+        z-index: 0;
+        background: linear-gradient(160deg, #0e1a30 0%, #050d18 100%);
+        background-size: cover;
+        background-position: center;
+      }
+      #game-bg::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(
+          to bottom,
+          rgba(0, 0, 0, 0.12) 0%,
+          transparent 35%,
+          transparent 55%,
+          rgba(0, 0, 0, 0.4) 100%
+        );
+        pointer-events: none;
+      }
+
+      /* ── Live2D ── */
+      #live2d-wrapper {
+        position: absolute;
+        inset: 0;
+        z-index: 2;
+        display: flex;
+        align-items: flex-end;
+        justify-content: center;
+        padding-bottom: 275px;
+        pointer-events: none;
+      }
+      #live2d-wrapper canvas {
+        width: 100% !important;
+        height: 100% !important;
+      }
+
+      /* ══ TOP HUD ══ */
+      #top-hud {
+        position: absolute;
+        top: 0;
+        left: 0;
+        z-index: 10;
+        padding: 12px 14px 10px;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+
+      #ep-label {
+        font-family: "Noto Serif Thai", serif;
+        font-size: 0.62rem;
+        font-weight: 300;
+        letter-spacing: 0.12em;
+        color: var(--dim);
+        margin-bottom: 2px;
+      }
+
+      .stat-row {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .stat-lbl {
+        font-size: 0.6rem;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        min-width: 18px;
+      }
+      .stat-lbl.ap {
+        color: var(--ap);
+      }
+      .stat-lbl.tp {
+        color: var(--tp);
+      }
+
+      .stat-track {
+        width: 72px;
+        height: 3px;
+        border-radius: 99px;
+        background: rgba(255, 255, 255, 0.12);
+        overflow: hidden;
+      }
+      #ap-bar {
+        height: 100%;
+        border-radius: 99px;
+        background: linear-gradient(90deg, #f472b6, #fb7185);
+        width: 0%;
+        transition: width 0.65s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+      #tp-bar {
+        height: 100%;
+        border-radius: 99px;
+        background: linear-gradient(90deg, #60a5fa, #38bdf8);
+        width: 0%;
+        transition: width 0.65s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+      .stat-num {
+        font-size: 0.6rem;
+        color: var(--dim);
+        min-width: 22px;
+        font-variant-numeric: tabular-nums;
+      }
+
+      /* mood top-right */
+      #mood-hud {
+        position: absolute;
+        top: 12px;
+        right: 14px;
+        z-index: 10;
+        display: flex;
+        align-items: center;
+        gap: 5px;
+      }
+      #mood-dot {
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        background: #6b9fd4;
+        flex-shrink: 0;
+        transition: background 0.4s;
+      }
+      #mood-text {
+        font-size: 0.58rem;
+        color: var(--dim);
+        letter-spacing: 0.08em;
+      }
+      /* view mode radio — ใต้ mood-hud */
+      #view-radio {
+        position: absolute;
+        top: 32px;
+        right: 14px;
+        z-index: 10;
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+        align-items: flex-end;
+      }
+      #view-radio label {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        cursor: pointer;
+        font-family: "Sarabun", sans-serif;
+        font-size: 0.62rem;
+        color: rgba(180, 200, 230, 0.55);
+        user-select: none;
+        letter-spacing: 0.05em;
+      }
+      #view-radio input[type="radio"] {
+        accent-color: #c084fc;
+        cursor: pointer;
+        width: 10px;
+        height: 10px;
+      }
+      #mood-counter-text {
+        font-size: 0.58rem;
+        color: rgba(255, 255, 255, 0.28);
+        margin-left: 2px;
+      }
+
+      /* ══ BOTTOM PANEL ══ */
+      #bottom-panel {
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        z-index: 10;
+        display: flex;
+        flex-direction: column;
+      }
+
+      /* ── Chat log ── */
+      #chat-log {
+        max-height: 220px;
+        overflow-y: auto;
+        padding: 12px 14px 8px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        background: rgba(0, 0, 0, 0.5);
+        scrollbar-width: none;
+      }
+      #chat-log::-webkit-scrollbar {
+        display: none;
+      }
+
+      .msg-bubble {
+        animation: slideUp 0.3s ease-out forwards;
+      }
+
+      /* ── Reaction box ── */
+      #reaction-box {
+        background: rgba(0, 0, 0, 0.5);
+        border-top: 1px solid rgba(255, 255, 255, 0.07);
+        padding: 10px 16px;
+        font-size: 0.88rem;
+        line-height: 1.65;
+        color: var(--text);
+      }
+      #reaction-box.hidden {
+        display: none;
+      }
+
+      /* ── Input area ── */
+      #input-row {
+        background: rgba(0, 0, 0, 0.5);
+        border-top: 1px solid rgba(255, 255, 255, 0.07);
+        padding: 10px 12px 18px;
+        display: flex;
+        gap: 8px;
+        align-items: flex-end;
+      }
+
+      #player-input {
+        flex: 1;
+        background: rgba(255, 255, 255, 0.07);
+        border: 1px solid rgba(255, 255, 255, 0.13);
+        border-radius: 14px;
+        padding: 10px 14px;
+        font-size: 0.9rem;
+        font-family: "Sarabun", sans-serif;
+        color: var(--text);
+        resize: none;
+        min-height: 42px;
+        max-height: 88px;
+        line-height: 1.5;
+        transition: border-color 0.2s;
+        -webkit-appearance: none;
+        appearance: none;
+      }
+      #player-input::placeholder {
+        color: rgba(232, 228, 222, 0.28);
+      }
+      #player-input:focus {
+        outline: none;
+        border-color: rgba(107, 159, 212, 0.5);
+      }
+
+      #send-btn {
+        width: 42px;
+        height: 42px;
+        flex-shrink: 0;
+        border-radius: 12px;
+        background: rgba(42, 82, 152, 0.55);
+        border: 1px solid rgba(107, 159, 212, 0.28);
+        color: #c8dff5;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition:
+          background 0.15s,
+          transform 0.1s;
+        -webkit-tap-highlight-color: transparent;
+      }
+      #send-btn:active {
+        transform: scale(0.92);
+        background: rgba(42, 82, 152, 0.85);
+      }
+      #send-btn:disabled {
+        opacity: 0.38;
+        pointer-events: none;
+      }
+      #send-btn svg {
+        width: 18px;
+        height: 18px;
+      }
+
+      /* ── Status bar ── */
+      #status-bar {
+        background: rgba(0, 0, 0, 0.5);
+        border-top: 1px solid rgba(255, 255, 255, 0.05);
+        padding: 4px 14px 7px;
+      }
+      #status-text {
+        font-size: 0.6rem;
+        color: rgba(255, 255, 255, 0.22);
+        letter-spacing: 0.06em;
+      }
+
+      /* ══ LOADING ══ */
+      #loading-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 100;
+        background: #070d18;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 18px;
+        transition: opacity 0.7s ease;
+      }
+      #loading-overlay.hidden {
+        opacity: 0;
+        pointer-events: none;
+      }
+
+      .ld-title {
+        font-family: "Noto Serif Thai", serif;
+        font-size: 3.2rem;
+        font-weight: 300;
+        color: #e8e4de;
+        letter-spacing: 0.2em;
+      }
+      .ld-dots {
+        display: flex;
+        gap: 7px;
+      }
+      .ld-dot {
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        background: rgba(200, 192, 180, 0.45);
+        animation: ldpulse 1.3s ease-in-out infinite;
+      }
+      .ld-dot:nth-child(2) {
+        animation-delay: 0.22s;
+      }
+      .ld-dot:nth-child(3) {
+        animation-delay: 0.44s;
+      }
+      @keyframes ldpulse {
+        0%,
+        100% {
+          opacity: 0.25;
+          transform: scale(0.8);
+        }
+        50% {
+          opacity: 1;
+          transform: scale(1.15);
+        }
+      }
+
+      /* ══ TOAST ══ */
+      #toast {
+        position: fixed;
+        bottom: 5.5rem;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 50;
+        background: rgba(5, 13, 26, 0.88);
+        border: 1px solid rgba(107, 159, 212, 0.22);
+        border-radius: 20px;
+        padding: 6px 18px;
+        font-size: 0.78rem;
+        color: var(--text);
+        white-space: nowrap;
+        transition: opacity 0.35s;
+        pointer-events: none;
+      }
+      #toast.hidden {
+        opacity: 0;
+      }
+
+      /* ══ ANIMATIONS ══ */
+      @keyframes slideUp {
+        from {
+          opacity: 0;
+          transform: translateY(8px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+        }
+        to {
+          opacity: 1;
+        }
+      }
+      @keyframes glowPulse {
+        0%,
+        100% {
+          filter: drop-shadow(0 0 8px currentColor);
+        }
+        50% {
+          filter: drop-shadow(0 0 22px currentColor);
+        }
+      }
+      @keyframes shake {
+        0%,
+        100% {
+          transform: translateX(0);
+        }
+        20% {
+          transform: translateX(-5px);
+        }
+        40% {
+          transform: translateX(5px);
+        }
+        60% {
+          transform: translateX(-3px);
+        }
+        80% {
+          transform: translateX(3px);
+        }
+      }
+      .shake {
+        animation: shake 0.38s ease;
+      }
+    </style>
+  </head>
+
+  <body>
+    <!-- Landscape -->
+    <div id="landscape-block">
+      <svg
+        width="36"
+        height="36"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.5"
+        viewBox="0 0 24 24"
+      >
+        <rect x="5" y="8" width="7" height="11" rx="1.5" />
+        <path d="M8 8V6M15 5v14M12 5h6a1 1 0 011 1v12a1 1 0 01-1 1h-6" />
+      </svg>
+      กรุณาหมุนหน้าจอเป็นแนวตั้ง
+    </div>
+
+    <!-- Loading -->
+    <div id="loading-overlay">
+      <div class="ld-title">อิอิ</div>
+      <div class="ld-dots">
+        <div class="ld-dot"></div>
+        <div class="ld-dot"></div>
+        <div class="ld-dot"></div>
+      </div>
+      <p
+        style="
+          font-size: 0.68rem;
+          color: rgba(200, 192, 180, 0.3);
+          letter-spacing: 0.22em;
+        "
+      >
+        LOADING
+      </p>
+    </div>
+
+    <!-- Game Root -->
+    <div id="game-root" style="opacity: 0">
+      <!-- BG -->
+      <div id="game-bg"></div>
+
+      <!-- Live2D -->
+      <div id="live2d-wrapper"></div>
+
+      <!-- TOP HUD left (EP / AP / TP) -->
+      <div id="top-hud">
+        <div id="ep-label">EP.1 — ที่นั่งตัวสุดท้าย</div>
+        <div class="stat-row">
+          <span class="stat-lbl ap">AP</span>
+          <div class="stat-track"><div id="ap-bar"></div></div>
+          <span class="stat-num" id="ap-val">0</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-lbl tp">TP</span>
+          <div class="stat-track"><div id="tp-bar"></div></div>
+          <span class="stat-num" id="tp-val">0</span>
+        </div>
+      </div>
+
+      <!-- TOP HUD right (mood) -->
+      <div id="mood-hud">
+        <span id="mood-dot"></span>
+        <span id="mood-text">Indifferent</span>
+        <span id="mood-counter-text"></span>
+      </div>
+
+      <!-- VIEW MODE radio -->
+      <div id="view-radio">
+        <label
+          ><input type="radio" name="view-mode" value="fullbody" checked />
+          Full</label
+        >
+        <label><input type="radio" name="view-mode" value="half" /> Half</label>
+        <label
+          ><input type="radio" name="view-mode" value="closeup" />
+          Close-up</label
+        >
+      </div>
+
+      <!-- BOTTOM PANEL -->
+      <div id="bottom-panel">
+        <!-- chat log -->
+        <div id="chat-log">
+          <div
+            style="
+              text-align: center;
+              font-size: 0.68rem;
+              color: rgba(255, 255, 255, 0.18);
+              padding: 6px 0;
+              letter-spacing: 0.12em;
+            "
+          >
+            ✦ เริ่มต้นการสนทนา ✦
+          </div>
+        </div>
+
+        <!-- reaction box (game.js toggles .hidden) -->
+        <div id="reaction-box" class="hidden">
+          <span id="reaction-text"></span>
+        </div>
+
+        <!-- input -->
+        <div id="input-row">
+          <textarea
+            id="player-input"
+            rows="1"
+            placeholder="อยากพูดอะไรกับเธอ"
+          ></textarea>
+          <button id="send-btn" title="ส่ง (Enter)">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              stroke-width="2.2"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                d="M12 19V5M5 12l7-7 7 7"
+              />
+            </svg>
+          </button>
+        </div>
+
+        <!-- status -->
+        <div id="status-bar">
+          <span id="status-text">กด Enter หรือปุ่มส่งเพื่อเริ่มสนทนา</span>
+        </div>
+      </div>
+    </div>
+    <!-- /game-root -->
+
+    <!-- Toast -->
+    <div id="toast" class="hidden"><span id="toast-text"></span></div>
+
+    <!-- ══ SCRIPTS ══ -->
+    <script>
+      // Mark Live2D unavailable by default; set to false when libs load ok
+      window.LIVE2D_UNAVAILABLE = false;
+    </script>
+
+    <!-- Live2D — ใช้ live2dcubismcore.js (ไม่ใช่ .min) ตามไฟล์จริงในโปรเจค -->
+    <script
+      src="/static/live2d/core/live2dcubismcore.js"
+      onerror="
+        window.LIVE2D_UNAVAILABLE = true;
+        console.warn('⚠ live2dcubismcore.js not found');
+      "
+    ></script>
+    <script
+      src="/static/live2d/core/pixi.min.js"
+      onerror="window.LIVE2D_UNAVAILABLE = true"
+    ></script>
+    <script
+      src="/static/live2d/core/pixi-live2d-cubism4.min.js"
+      onerror="window.LIVE2D_UNAVAILABLE = true"
+    ></script>
+
+    <!-- BG และ model positioning จัดการใน game.js แล้ว -->
+
+    <script src="/static/game.js"></script>
+  </body>
+</html>
