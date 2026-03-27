@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # ── Constants ──────────────────────────────────────────────────────────
-VALID_MOODS   = {'cold', 'neutral', 'warm', 'touched'}
+VALID_MOODS = {'exasperated', 'neutral', 'warm', 'touched'}
 RUDE_KEYWORDS = ['มึง', 'กู', 'ไอ้', 'อี', 'สัตว์',
                  'ควาย', 'บ้า', 'โง่', 'ขยะ', 'เพี้ยน', 'แม่ง']
 
@@ -105,15 +105,15 @@ def enforce_rules(result: dict, player_input: str, ap: int) -> dict:
     if any(kw in player_input for kw in RUDE_KEYWORDS):
         result['ap_change'] = min(result['ap_change'], -5)
         result['tp_change'] = min(result['tp_change'], -3)
-        result['mood']      = 'cold'
+        result['mood']      = 'exasperated'
 
     ap_change = result['ap_change']
     if ap_change > 0 and result['mood'] not in ('warm', 'touched'):
         result['mood'] = 'warm'
     elif ap_change == 0 and result['mood'] != 'neutral':
         result['mood'] = 'neutral'
-    elif ap_change < 0 and result['mood'] != 'cold':
-        result['mood'] = 'cold'
+    elif ap_change < 0 and result['mood'] != 'exasperated':
+        result['mood'] = 'exasperated'
     if ap < 30 and result['mood'] in ('warm', 'touched'):
         result['mood'] = 'neutral'
     if result['mood'] not in VALID_MOODS:
