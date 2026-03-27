@@ -1,7 +1,7 @@
 from game.config import EPISODES, get_ending
-from game.fon    import call_fon
+from game.character import call_fern
 
-MOOD_SCORE = {'warm': 1, 'touched': 2, 'neutral': 0, 'cold': -1}
+MOOD_SCORE = {'happy': 1, 'touched': 2, 'neutral': 0, 'exasperated': -1, 'sad': -1}
 
 ENDING_KEY_MAP = {
     ('WARM', 0): 'warm_a', ('WARM', 1): 'warm_b', ('WARM', 2): 'warm_c',
@@ -61,13 +61,13 @@ class GameState:
             return {'error': 'game already ended'}
 
         ep_data    = self.current_ep()
-        fon_result = call_fon(player_input, ep_data, self.ap, self.tp)
+        fern_result = call_fern(player_input, ep_data, self.ap, self.tp)
 
-        self.ap += fon_result['ap_change']
-        self.tp += fon_result['tp_change']
+        self.ap += fern_result['ap_change']
+        self.tp += fern_result['tp_change']
         self._clamp_stats()
 
-        mood = fon_result['mood']
+        mood = fern_result['mood']
         self.mood_counter += MOOD_SCORE.get(mood, 0)
         self.turn += 1
 
@@ -90,23 +90,23 @@ class GameState:
                 event            = 'branch'
                 new_ep_narrative = self.current_ep().get('narrative', '')
                 new_ep_context   = self.current_ep().get('context', '')
-                new_ep_intro     = self.current_ep().get('fon_intro', '')
+                new_ep_intro     = self.current_ep().get('fern_intro', '')
                 new_ep_hint      = self.current_ep().get('hint', '')
             else:
                 self.current_ep_id = EPISODES[self.current_ep_id].get('next', self.current_ep_id)
                 new_ep_narrative = self.current_ep().get('narrative', '')
                 new_ep_context   = self.current_ep().get('context', '')
-                new_ep_intro     = self.current_ep().get('fon_intro', '')
+                new_ep_intro     = self.current_ep().get('fern_intro', '')
                 new_ep_hint      = self.current_ep().get('hint', '')
 
         return {
-            'reaction'       : fon_result['reaction'],
+            'reaction'       : fern_result['reaction'],
             'mood'           : mood,
-            'reason'         : fon_result.get('reason', ''),
+            'reason'         : fern_result.get('reason', ''),
             'ap'             : self.ap,
             'tp'             : self.tp,
-            'ap_change'      : fon_result['ap_change'],
-            'tp_change'      : fon_result['tp_change'],
+            'ap_change'      : fern_result['ap_change'],
+            'tp_change'      : fern_result['tp_change'],
             'mood_counter'   : self.mood_counter,
             'episode'        : self.current_ep_id,
             'episode_label'  : self.episode_label(),

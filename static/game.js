@@ -1,5 +1,5 @@
 /**
- * game.js — ฝน Visual Novel
+ * game.js - Fern Visual Novel
  * ─────────────────────────────────────────────
  * Live2D control · Flask API · BG polling
  */
@@ -17,23 +17,20 @@ const CONFIG = {
   /* mood → Live2D motion group mapping */
   MOTION_MAP: {
     neutral: { motion: "fern_neutral" },
-    cold: { motion: "fern_cold" },
+    exasperated: { motion: "fern_exasperated" },
     sad: { motion: "fern_sad" },
-    warm: { motion: "fern_warm" },
     happy: { motion: "fern_happy" },
     touched: { motion: "fern_touched" },
   },
 
   /* mood → glow color for reaction box */
   MOOD_COLOR: {
-    warm: "#f9a8d4",
+    exasperated: "#fb923c",
     touched: "#fda4af",
     happy: "#fde68a",
     neutral: "#6b9fd4",
-    cold: "#94a3b8",
     sad: "#7dd3fc",
   },
-
   BG_POLL_INTERVAL: 3000, // ms ระหว่าง poll
   BG_POLL_MAX: 60, // poll สูงสุด 60 ครั้ง (~3 นาที)
 };
@@ -43,10 +40,10 @@ const CONFIG = {
 ══════════════════════════════════════════ */
 // session_id คงที่ตลอด browser session
 const SESSION_ID =
-  sessionStorage.getItem("fon_sid") ||
+  sessionStorage.getItem("fern_sid") ||
   (() => {
     const id = Math.random().toString(36).slice(2, 10);
-    sessionStorage.setItem("fon_sid", id);
+    sessionStorage.setItem("fern_sid", id);
     return id;
   })();
 
@@ -210,10 +207,9 @@ function updateStats({ ap, tp, mood, moodCounter, episodeLabel }) {
     state.mood = mood;
     const color = CONFIG.MOOD_COLOR[mood] || "#6b9fd4";
     const MOOD_LABEL = {
-      cold: "Resentful",
+      exasperated: "Exasperated",
       neutral: "Indifferent",
       sad: "Sad",
-      warm: "Friendly",
       happy: "Happy",
       touched: "Smitten",
     };

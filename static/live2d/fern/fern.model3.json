@@ -16,7 +16,8 @@
       "fern_sad": [{ "File": "motion/fern_sad.motion3.json" }],
       "fern_warm": [{ "File": "motion/fern_warm.motion3.json" }],
       "fern_happy": [{ "File": "motion/fern_happy.motion3.json" }],
-      "fern_touched": [{ "File": "motion/fern_touched.motion3.json" }]
+      "fern_touched": [{ "File": "motion/fern_touched.motion3.json" }],
+      "fern_exasperated": [{ "File": "motion/fern_exasperated.motion3.json" }]
     }
   },
   "Groups": [

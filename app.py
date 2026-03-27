@@ -80,7 +80,7 @@ def start():
     return jsonify({
         'episode'      : gs.current_ep_id,
         'episode_label': gs.episode_label(),
-        'intro_text'   : ep['fon_intro'],
+        'intro_text'   : ep['fern_intro'],
         'ap'           : gs.ap,
         'tp'           : gs.tp,
         'turn'         : gs.turn,
