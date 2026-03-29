@@ -1,3 +1,14 @@
+import sys
+# ── Force UTF-8 stdout FIRST — before any other import that might print Thai ──
+# Railway's default stdout encoding is ASCII → UnicodeEncodeError on Thai chars
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
+import os
+os.environ['PYTHONIOENCODING'] = 'utf-8'
+
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -12,7 +23,6 @@ from game.auth import (
     get_llm_setting, save_llm_setting,
     get_turns, get_summaries,
 )
-import os
 
 app = Flask(__name__, static_folder="static")
 
@@ -44,9 +54,9 @@ def get_or_create_state(user_id: str) -> GameState:
     return sessions[user_id]
 
 
-# ══════════════════════════════════════════
+# ══════════════════════════════════════════════════════════════════════
 #  PROFILE — username
-# ══════════════════════════════════════════
+# ══════════════════════════════════════════════════════════════════════
 
 @app.route("/api/profile", methods=["GET"])
 @require_auth
@@ -70,9 +80,9 @@ def api_set_profile():
     return jsonify({"username": username})
 
 
-# ══════════════════════════════════════════
+# ══════════════════════════════════════════════════════════════════════
 #  SETTINGS — LLM provider
-# ══════════════════════════════════════════
+# ══════════════════════════════════════════════════════════════════════
 
 @app.route("/api/settings", methods=["GET"])
 @require_auth
@@ -104,9 +114,9 @@ def api_set_settings():
     return jsonify({"llm_provider": provider})
 
 
-# ══════════════════════════════════════════
+# ══════════════════════════════════════════════════════════════════════
 #  GAME
-# ══════════════════════════════════════════
+# ══════════════════════════════════════════════════════════════════════
 
 @app.route("/api/start", methods=["POST"])
 @require_auth
@@ -206,7 +216,6 @@ def api_bg():
 
     img_bytes = generate_bg_image(prompt)
     if img_bytes is None:
-        # ถ้า generate ไม่ได้ → frontend จะใช้ gradient แทนอยู่แล้ว
         return jsonify({"error": "generate ไม่สำเร็จ"}), 500
 
     img_b64 = base64.b64encode(img_bytes).decode("utf-8")
