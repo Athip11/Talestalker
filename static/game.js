@@ -539,14 +539,23 @@ const ENDING_DATA = {
   },
 };
 
-function showEnding(endingKey, endingTitle, endingText, endingSetting, endingMood) {
+function showEnding(
+  endingKey,
+  endingTitle,
+  endingText,
+  endingSetting,
+  endingMood,
+) {
   const data = ENDING_DATA[endingKey] || {
-    emoji: "🌸", title: endingKey, color: "#c8dff5", desc: "จบแล้ว",
+    emoji: "🌸",
+    title: endingKey,
+    color: "#c8dff5",
+    desc: "จบแล้ว",
   };
 
   const displayTitle = endingTitle || data.title;
-  const storyHtml    = endingText ? endingText.replace(/\n/g, "<br>") : data.desc;
-  const playerName   = _username || "ผู้เล่น";
+  const storyHtml = endingText ? endingText.replace(/\n/g, "<br>") : data.desc;
+  const playerName = _username || "ผู้เล่น";
 
   const overlay = document.createElement("div");
   overlay.style.cssText = `
@@ -623,52 +632,63 @@ function showEnding(endingKey, endingTitle, endingText, endingSetting, endingMoo
   document.body.appendChild(overlay);
 
   /* ── Gift submit ── */
-  const giftInput   = overlay.querySelector("#gift-input");
+  const giftInput = overlay.querySelector("#gift-input");
   const giftSendBtn = overlay.querySelector("#gift-send-btn");
-  const giftStatus  = overlay.querySelector("#gift-status");
+  const giftStatus = overlay.querySelector("#gift-status");
   const giftImgWrap = overlay.querySelector("#gift-img-wrap");
-  const giftImg     = overlay.querySelector("#gift-img");
+  const giftImg = overlay.querySelector("#gift-img");
   const giftCaption = overlay.querySelector("#gift-caption");
 
   async function submitGift() {
     const obj = giftInput.value.trim();
-    if (!obj) { giftStatus.textContent = "พิมพ์ชื่อของขวัญก่อนนะคะ"; return; }
+    if (!obj) {
+      giftStatus.textContent = "พิมพ์ชื่อของขวัญก่อนนะคะ";
+      return;
+    }
 
     giftSendBtn.disabled = true;
-    giftInput.disabled   = true;
+    giftInput.disabled = true;
     giftStatus.textContent = "✨ กำลังสร้างภาพ...";
 
     try {
-      const res  = await fetch("/api/gift", {
-        method  : "POST",
-        headers : { "Content-Type": "application/json", Authorization: `Bearer ${_accessToken}` },
-        body    : JSON.stringify({ object: obj, mood: endingMood || "neutral", setting: endingSetting }),
+      const res = await fetch("/api/gift", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${_accessToken}`,
+        },
+        body: JSON.stringify({
+          object: obj,
+          mood: endingMood || "neutral",
+          setting: endingSetting,
+        }),
       });
       const data = await res.json();
 
       if (data.error) {
         giftStatus.textContent = `เกิดข้อผิดพลาด: ${data.error}`;
         giftSendBtn.disabled = false;
-        giftInput.disabled   = false;
+        giftInput.disabled = false;
         return;
       }
 
-      giftImg.src         = data.image;
+      giftImg.src = data.image;
       giftCaption.textContent = `"${obj}" — ของขวัญจาก ${playerName}`;
       giftImgWrap.style.display = "block";
-      giftStatus.textContent    = "";
+      giftStatus.textContent = "";
       giftSendBtn.style.display = "none";
-      giftInput.style.display   = "none";
-
+      giftInput.style.display = "none";
     } catch (err) {
       giftStatus.textContent = "ไม่สามารถเชื่อมต่อได้ กรุณาลองใหม่";
       giftSendBtn.disabled = false;
-      giftInput.disabled   = false;
+      giftInput.disabled = false;
     }
   }
 
   giftSendBtn.addEventListener("click", submitGift);
-  giftInput.addEventListener("keydown", (e) => { if (e.key === "Enter") submitGift(); });
+  giftInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") submitGift();
+  });
 
   /* ── Replay ── */
   overlay.querySelector("#replay-btn").addEventListener("click", async () => {
@@ -781,7 +801,14 @@ async function handleSend() {
       if (res.ending === "warm_a") applyMoodToLive2D("happy");
       else if (res.ending === "cold_c") applyMoodToLive2D("sad");
       setTimeout(
-        () => showEnding(res.ending, res.ending_title, res.ending_text,res.ending_setting || "",state.mood),
+        () =>
+          showEnding(
+            res.ending,
+            res.ending_title,
+            res.ending_text,
+            res.ending_setting || "",
+            state.mood,
+          ),
         1200,
       );
     }
@@ -992,7 +1019,8 @@ document.getElementById("logout-btn").addEventListener("click", logout);
 async function checkProfile() {
   try {
     const data = await apiGetProfile();
-    if (data.username) {
+    const isRealUsername = data.username && !data.username.startsWith("_tmp_");
+    if (isRealUsername) {
       _username = data.username;
       document.getElementById("loading-overlay").classList.remove("hidden");
       boot();

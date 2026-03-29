@@ -166,20 +166,29 @@ def api_talk():
     user_id  = request.user_id
     text     = (request.json or {}).get("text", "").strip()
     username = (request.json or {}).get("username", "ผู้เล่น")
+    print(f"[TALK] user={user_id[:8]} text={repr(text[:40])}", flush=True)
     if not text:
         return jsonify({"error": "empty input"}), 400
 
-    gs = get_or_create_state(user_id)
+    try:
+        gs = get_or_create_state(user_id)
+        print(f"[TALK] state ok — ep={gs.current_ep_id} provider={gs.llm_provider}", flush=True)
 
-    # sync llm_provider จาก DB ทุก request — ป้องกัน multi-process/worker ไม่ sync
-    gs.llm_provider = get_llm_setting(user_id)
+        gs.llm_provider = get_llm_setting(user_id)
 
-    result = gs.process_turn(text)
+        result = gs.process_turn(text)
+        print(f"[TALK] process_turn ok — mood={result.get('mood')} reaction={repr(result.get('reaction','')[:40])}", flush=True)
 
-    save_game_state(user_id, gs)
+        save_game_state(user_id, gs)
+        result["username"] = username
+        return jsonify(result)
 
-    result["username"] = username
-    return jsonify(result)
+    except Exception as e:
+        import traceback
+        tb = traceback.format_exc()
+        print(f"[TALK ERROR] {type(e).__name__}: {e}", flush=True)
+        print(f"[TALK TRACEBACK]\n{tb}", flush=True)
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/")
