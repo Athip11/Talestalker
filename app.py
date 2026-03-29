@@ -1,7 +1,7 @@
 from dotenv import load_dotenv
 load_dotenv()
 
-from game.character import call_fern, summarize_ep, generate_gift_image
+from game.character import call_fern, summarize_ep, generate_gift_image, generate_bg_image
 import base64
 from flask import Flask, request, jsonify, send_from_directory
 from game.state import GameState
@@ -13,11 +13,6 @@ from game.auth import (
     get_turns, get_summaries,
 )
 import os
-
-# BG server URL — ชี้ไปที่ ngrok URL ของ bg_server.py ที่รันบนเครื่องตัวเอง
-# ตั้งค่าผ่าน environment variable BG_SERVER_URL ใน Railway
-# เช่น BG_SERVER_URL=https://xxxx.ngrok-free.app
-BG_SERVER_URL = os.environ.get("BG_SERVER_URL", "http://localhost:5001")
 
 app = Flask(__name__, static_folder="static")
 
@@ -197,6 +192,22 @@ def api_gift():
     img_bytes = generate_gift_image(obj, mood, setting)
     if img_bytes is None:
         return jsonify({"error": "ไม่สามารถสร้างภาพได้"}), 500
+
+    img_b64 = base64.b64encode(img_bytes).decode("utf-8")
+    return jsonify({"image": f"data:image/png;base64,{img_b64}"})
+
+
+@app.route("/api/bg", methods=["POST"])
+def api_bg():
+    """สร้าง background ผ่าน Novita AI — คืนรูปตรงๆ ไม่มี queue"""
+    prompt = (request.json or {}).get("prompt", "").strip()
+    if not prompt:
+        return jsonify({"error": "prompt required"}), 400
+
+    img_bytes = generate_bg_image(prompt)
+    if img_bytes is None:
+        # ถ้า generate ไม่ได้ → frontend จะใช้ gradient แทนอยู่แล้ว
+        return jsonify({"error": "generate ไม่สำเร็จ"}), 500
 
     img_b64 = base64.b64encode(img_bytes).decode("utf-8")
     return jsonify({"image": f"data:image/png;base64,{img_b64}"})

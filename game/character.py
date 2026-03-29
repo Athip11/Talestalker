@@ -375,14 +375,6 @@ def summarize_ep(turns: list[dict], ep_data: dict,
 #  GIFT IMAGE GENERATION (Imagen 3)
 # ══════════════════════════════════════════════════════════════════════
 
-MOOD_THAI = {
-    'happy'       : 'ยิ้มแย้มรื่นเริง',
-    'touched'     : 'ซาบซึ้งใจ อบอุ่น',
-    'neutral'     : 'สงบนิ่ง สำรวม',
-    'exasperated' : 'หงุดหงิดเล็กน้อย',
-    'sad'         : 'เศร้าเล็กน้อย',
-}
-
 def _translate_to_english(text: str) -> str:
     try:
         llm = ChatGoogleGenerativeAI(
@@ -489,4 +481,45 @@ def generate_gift_image(gift_object: str, mood: str, setting: str) -> bytes | No
         return buf.getvalue()
     except Exception as e:
         print(f"generate_gift_image error: {e}")
+        return None
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  BACKGROUND IMAGE GENERATION (Novita AI)
+# ══════════════════════════════════════════════════════════════════════
+
+def generate_bg_image(prompt: str) -> bytes | None:
+    full_prompt = (
+        f"anime visual novel background, {prompt}, "
+        f"no characters, no people, no humans, empty scene, "
+        f"masterpiece, best quality, ultra-detailed, "
+        f"2d anime style, painterly, soft lighting, atmospheric depth, "
+        f"vibrant colors, cinematic composition"
+    )
+    negative_prompt = (
+        "people, characters, person, human, girl, boy, figure, silhouette, "
+        "ugly, blurry, low quality, watermark, text, logo, nsfw, "
+        "worst quality, lowres, jpeg artifacts"
+    )
+    print(f"[BG] ⏳ กำลัง generate... prompt='{prompt[:60]}'")   # ← เพิ่ม
+    t0 = time.time()                                               # ← เพิ่ม
+    try:
+        res = _novita_client.txt2img_v3(
+            model_name      = "animagineXLV31_v31.safetensors",
+            prompt          = full_prompt,
+            negative_prompt = negative_prompt,
+            width           = 1216,
+            height          = 832,
+            image_num       = 1,
+            steps           = 25,
+            guidance_scale  = 7.5,
+            sampler_name    = Samplers.DPMPP_M_KARRAS,
+        )
+        img = base64_to_image(res.images_encoded[0])
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        print(f"[BG] ✅ done ({time.time()-t0:.1f}s) — prompt='{prompt[:60]}'")  # ← แก้
+        return buf.getvalue()
+    except Exception as e:
+        print(f"[BG] ❌ error ({time.time()-t0:.1f}s): {e}")                     # ← แก้
         return None
