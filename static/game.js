@@ -151,22 +151,11 @@ const CONFIG = {
     neutral: "#6b9fd4",
     sad: "#7dd3fc",
   },
-  BG_POLL_INTERVAL: 3000, // ms ระหว่าง poll
-  BG_POLL_MAX: 60, // poll สูงสุด 60 ครั้ง (~3 นาที)
 };
 
 /* ══════════════════════════════════════════
    GAME STATE
 ══════════════════════════════════════════ */
-// session_id คงที่ตลอด browser session
-const SESSION_ID =
-  sessionStorage.getItem("fern_sid") ||
-  (() => {
-    const id = Math.random().toString(36).slice(2, 10);
-    sessionStorage.setItem("fern_sid", id);
-    return id;
-  })();
-
 const state = {
   ap: 20,
   tp: 20,
@@ -260,17 +249,9 @@ function playMotion(group, index = 0) {
   } catch (_) {}
 }
 
-function playExpression(name) {
-  if (!state.live2dModel || !name) return;
-  try {
-    state.live2dModel.expression(name);
-  } catch (_) {}
-}
-
 function applyMoodToLive2D(mood) {
   const map = CONFIG.MOTION_MAP[mood] || CONFIG.MOTION_MAP.neutral;
   playMotion(map.motion);
-  if (map.expression) playExpression(map.expression);
 }
 
 function showPlaceholderCharacter() {
@@ -845,35 +826,6 @@ function applyBgImage(dataUrl) {
   bgEl.style.backgroundPosition = "center";
 }
 
-async function pollBgJob(jobId) {
-  for (let i = 0; i < CONFIG.BG_POLL_MAX; i++) {
-    await new Promise((r) => setTimeout(r, CONFIG.BG_POLL_INTERVAL));
-    try {
-      const res = await fetch(`/api/bg/status/${jobId}`);
-      const data = await res.json();
-
-      if (data.status === "done") {
-        if (data.image) applyBgImage(data.image);
-        setStatus("พิมพ์ข้อความถึงเฟิร์น");
-        return;
-      }
-      if (data.status === "error" || data.status === "not_found") {
-        console.warn("BG job failed:", data.status);
-        setStatus("พิมพ์ข้อความถึงเฟิร์น");
-        return;
-      }
-      // status === "pending" → loop ต่อ
-    } catch (err) {
-      console.warn("BG poll error:", err.message);
-      setStatus("พิมพ์ข้อความถึงเฟิร์น");
-      return;
-    }
-  }
-  // หมดรอบ poll
-  console.warn("BG job timed out after polling");
-  setStatus("พิมพ์ข้อความถึงเฟิร์น");
-}
-
 async function loadBackground(prompt) {
   if (!prompt || prompt === currentBgPrompt) return;
   currentBgPrompt = prompt;
@@ -895,12 +847,15 @@ async function loadBackground(prompt) {
     }
 
     const data = await res.json();
-    if (data.job_id) {
-      // poll จนกว่า GPU จะเสร็จ
-      pollBgJob(data.job_id); // ไม่ await — รันใน background
+    if (data.image) {
+      applyBgImage(data.image);
+      console.log("[BG] ✅ โหลดภาพสำเร็จ");
+    } else {
+      console.warn("[BG] ไม่ได้รับ image จาก server");
     }
+    setStatus("พิมพ์ข้อความถึงเฟิร์น");
   } catch (err) {
-    console.warn("BG failed:", err.message);
+    console.warn("[BG] failed:", err.message);
     setStatus("พิมพ์ข้อความถึงเฟิร์น");
   }
 }
@@ -1238,9 +1193,6 @@ async function boot() {
   }
 
   initLive2D();
-
-  // ถ้า game_over ค้างจาก session ก่อน → force สร้างใหม่
-  const isReturning = sessionStorage.getItem("fern_sid") !== null;
 
   try {
     const startData = await apiStart(false);
