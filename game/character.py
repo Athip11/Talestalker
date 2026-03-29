@@ -305,10 +305,10 @@ def call_fern(player_input: str, ep: dict, ap: int, tp: int,
             result = _parse_raw(raw)
             if result is None:
                 if attempt == 0:
-                    print(f'  ⚠️  Parse error รอบ 1 [{provider}] — retry...')
+                    print(f'  [WARN] Parse error round 1 [{provider}] - retrying...')
                     time.sleep(1)
                     continue
-                print(f'  ⚠️  Parse error รอบ 2 [{provider}] — ใช้ค่า default')
+                print(f'  [WARN] Parse error round 2 [{provider}] - using default')
                 return {'reaction': '...', 'ap_change': 0,
                         'tp_change': 0, 'reason': 'parse error', 'mood': 'neutral'}
 
@@ -321,7 +321,7 @@ def call_fern(player_input: str, ep: dict, ap: int, tp: int,
 
         except Exception as e:
             if attempt == 0:
-                print(f'  ⚠️  API error รอบ 1 [{provider}] — retry... ({str(e)[:60]})')
+                print(f'  [WARN] API error round 1 [{provider}] - retrying... ({str(e).encode("ascii","replace")[:60]})')
                 time.sleep(1)
                 continue
             return {
@@ -364,16 +364,24 @@ def summarize_ep(turns: list[dict], ep_data: dict,
 
         except Exception as e:
             if attempt == 0:
-                print(f'  ⚠️  summarize_ep error [{provider}] รอบ 1 — retry... ({str(e)[:60]})')
+                print(f'  [WARN] summarize_ep error [{provider}] round 1 - retrying... ({str(e).encode("ascii","replace")[:60]})')
                 time.sleep(1)
                 continue
-            print(f'  ⚠️  summarize_ep failed [{provider}]: {e}')
+            print(f'  [WARN] summarize_ep failed [{provider}]: {str(e).encode("ascii","replace")}')
             return {"summary": "ไม่สามารถสรุปได้",
                     "key_moments": [], "fern_feeling": "ไม่มีข้อมูล"}
 
 # ══════════════════════════════════════════════════════════════════════
 #  GIFT IMAGE GENERATION (Imagen 3)
 # ══════════════════════════════════════════════════════════════════════
+
+MOOD_THAI = {
+    'happy'       : 'ยิ้มแย้มรื่นเริง',
+    'touched'     : 'ซาบซึ้งใจ อบอุ่น',
+    'neutral'     : 'สงบนิ่ง สำรวม',
+    'exasperated' : 'หงุดหงิดเล็กน้อย',
+    'sad'         : 'เศร้าเล็กน้อย',
+}
 
 def _translate_to_english(text: str) -> str:
     try:
@@ -386,10 +394,10 @@ def _translate_to_english(text: str) -> str:
             f"Translate to English, reply with only the translated phrase, no explanation: {text}"
         )
         result = res.content if hasattr(res, 'content') else str(res)
-        print(f"translate: '{text}' → '{result.strip()}'")
+        print(f"[translate] '{text.encode('ascii','replace')}' -> '{result.strip().encode('ascii','replace')}'")
         return result.strip()
     except Exception as e:
-        print(f"translate error: {e}")
+        print(f"[translate] error: {str(e).encode('ascii','replace')}")
         return text
 
 def _make_holdable(obj_en: str) -> str:
@@ -422,10 +430,10 @@ def _make_holdable(obj_en: str) -> str:
         )
         res    = llm.invoke(prompt)
         result = (res.content if hasattr(res, 'content') else str(res)).strip()
-        print(f"_make_holdable: '{obj_en}' → '{result}'")
+        print(f"[holdable] '{obj_en}' -> '{result}'")
         return result if result else obj_en
     except Exception as e:
-        print(f"_make_holdable error: {e} — fallback to original")
+        print(f"[holdable] error: {str(e).encode('ascii','replace')} - fallback to original")
         return obj_en
 
 
@@ -441,7 +449,7 @@ def generate_gift_image(gift_object: str, mood: str, setting: str) -> bytes | No
     # แปลภาษาไทย → อังกฤษ แล้วแปลงให้ถือได้
     gift_en      = _translate_to_english(gift_object)
     gift_prompt  = _make_holdable(gift_en)
-    print(f"gift: '{gift_object}' → '{gift_en}' → '{gift_prompt}'")
+    print(f"[gift] '{gift_object.encode('ascii','replace')}' -> '{gift_en}' -> '{gift_prompt}'")
 
     prompt_text = (
         # ✅ ย้าย holding มาต้น prompt ให้ token weight สูง + เพิ่ม emphasis (:1.4)
@@ -480,7 +488,7 @@ def generate_gift_image(gift_object: str, mood: str, setting: str) -> bytes | No
         img.save(buf, format="PNG")
         return buf.getvalue()
     except Exception as e:
-        print(f"generate_gift_image error: {e}")
+        print(f"[gift] generate error: {str(e).encode('ascii','replace')}")
         return None
 
 
@@ -501,8 +509,8 @@ def generate_bg_image(prompt: str) -> bytes | None:
         "ugly, blurry, low quality, watermark, text, logo, nsfw, "
         "worst quality, lowres, jpeg artifacts"
     )
-    print(f"[BG] ⏳ กำลัง generate... prompt='{prompt[:60]}'")   # ← เพิ่ม
-    t0 = time.time()                                               # ← เพิ่ม
+    print(f"[BG] generating... prompt='{prompt[:60]}'")
+    t0 = time.time()
     try:
         res = _novita_client.txt2img_v3(
             model_name      = "animagineXLV31_v31.safetensors",
@@ -518,8 +526,8 @@ def generate_bg_image(prompt: str) -> bytes | None:
         img = base64_to_image(res.images_encoded[0])
         buf = io.BytesIO()
         img.save(buf, format="PNG")
-        print(f"[BG] ✅ done ({time.time()-t0:.1f}s) — prompt='{prompt[:60]}'")  # ← แก้
+        print(f"[BG] done ({time.time()-t0:.1f}s) - prompt='{prompt[:60]}'")
         return buf.getvalue()
     except Exception as e:
-        print(f"[BG] ❌ error ({time.time()-t0:.1f}s): {e}")                     # ← แก้
+        print(f"[BG] error ({time.time()-t0:.1f}s): {str(e).encode('ascii','replace')}")
         return None
