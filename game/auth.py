@@ -59,9 +59,14 @@ def get_username(user_id: str) -> str | None:
             .eq("user_id", user_id) \
             .maybe_single() \
             .execute()
-        return res.data["username"] if res.data else None
+            
+        # แก้ไข: เช็คว่า res ไม่ใช่ None และมีข้อมูล ก่อนเรียกใช้งาน
+        if res and hasattr(res, 'data') and res.data:
+            return res.data.get("username")
+        return None
     except Exception as e:
-        print(f"get_username error: {e}")
+        # แก้ไข: เอา print ออกเพื่อแก้บั๊ก I/O operation on closed file
+        pass
         return None
 
 
@@ -86,20 +91,42 @@ def get_llm_setting(user_id: str) -> str:
             .eq("user_id", user_id) \
             .maybe_single() \
             .execute()
-        if res.data and res.data.get("llm_provider") in VALID_LLMS:
-            return res.data["llm_provider"]
+            
+        # แก้ไข: เช็คว่า res ไม่ใช่ None และมีข้อมูล ก่อนเรียกใช้งาน
+        if res and hasattr(res, 'data') and res.data:
+            provider = res.data.get("llm_provider")
+            if provider in VALID_LLMS:
+                return provider
+                
         return DEFAULT_LLM
     except Exception as e:
-        print(f"get_llm_setting error: {e}")
+        # แก้ไข: เอา print ออกเพื่อแก้บั๊ก I/O operation on closed file
+        pass
         return DEFAULT_LLM
 
 
 def save_llm_setting(user_id: str, provider: str) -> bool:
-    """บันทึก llm_provider — UPDATE เท่านั้น (ป้องกัน not-null constraint บน username)"""
+    """บันทึก llm_provider — ใช้ UPDATE ก่อน ถ้า row ยังไม่มีค่อย UPSERT (ป้องกัน not-null บน username)"""
     if provider not in VALID_LLMS:
         return False
     try:
-        supabase.table("profiles")             .update({"llm_provider": provider})             .eq("user_id", user_id)             .execute()
+        # ลอง UPDATE ก่อน (กรณี row มีอยู่แล้ว)
+        res = supabase.table("profiles") \
+            .update({"llm_provider": provider}) \
+            .eq("user_id", user_id) \
+            .execute()
+
+        # ถ้า UPDATE ไม่กระทบ row ใดเลย (row ยังไม่มี) ให้ upsert สร้าง row ใหม่
+        # ใช้ placeholder username = "_tmp_<8 ตัวแรกของ user_id>"
+        # (user จะเปลี่ยน username จริงผ่าน POST /api/profile ทีหลัง)
+        updated_count = len(res.data) if res and res.data else 0
+        if updated_count == 0:
+            placeholder = f"_tmp_{user_id[:8]}"
+            supabase.table("profiles").upsert(
+                {"user_id": user_id, "llm_provider": provider, "username": placeholder},
+                on_conflict="user_id",
+            ).execute()
+
         return True
     except Exception as e:
         print(f"save_llm_setting error: {e}")

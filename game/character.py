@@ -284,24 +284,10 @@ import io as _io
 @contextlib.contextmanager
 def _utf8_stdout():
     """
-    Context manager: ชั่วคราวแทนที่ sys.stdout ด้วย wrapper ที่ยอมรับ Unicode
-    ป้องกัน httpx / openai ที่ยังดื้อ print ลง stdout ตรงๆ
+    No-op context manager — การแทนที่ sys.stdout ทำให้พังบน Windows
+    เก็บไว้เพื่อไม่ให้ต้องแก้ call site
     """
-    _orig = sys.stdout
-    try:
-        # TextIOWrapper ที่เขียนลง buffer เดิม แต่ encode ด้วย utf-8
-        if hasattr(_orig, "buffer"):
-            sys.stdout = _io.TextIOWrapper(
-                _orig.buffer, encoding="utf-8", errors="replace", line_buffering=True
-            )
-        yield
-    finally:
-        # flush แล้วคืน stdout เดิม
-        try:
-            sys.stdout.flush()
-        except Exception:
-            pass
-        sys.stdout = _orig
+    yield
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -310,7 +296,6 @@ def _utf8_stdout():
 
 def _call_fern_typhoon(player_input: str, ep: dict, ap: int, tp: int,
                        memory: str) -> str:
-    # ตัด memory ถ้ายาวเกิน 400 chars ป้องกัน prompt overflow ใน Typhoon
     memory_trimmed = memory if len(memory) <= 400 else memory[:400] + "..."
     system = FERN_SYSTEM.format(
         setting = ep['setting'],
@@ -329,7 +314,8 @@ def _call_fern_typhoon(player_input: str, ep: dict, ap: int, tp: int,
             max_tokens  = 4096,
             temperature = 0.8,
         )
-    return response.choices[0].message.content or ""
+    raw = response.choices[0].message.content or ""
+    return raw
 
 
 def _summarize_typhoon(turns_text: str, ep_data: dict) -> str:

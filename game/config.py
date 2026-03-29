@@ -255,7 +255,5 @@ def get_ending(route: str, ap: int, tp: int) -> dict:
     return pool[-1]
 
 
-print('✅ config.py โหลดแล้ว')
-print(f'   {len(EPISODES)} Episodes | '
-      f'{len(ENDINGS["WARM"])} Warm Endings | '
-      f'{len(ENDINGS["COLD"])} Cold Endings')
+# ลบ print() ออก — ทำให้เกิด UnicodeEncodeError บน Railway (ASCII stdout)
+# print('config.py loaded:', len(EPISODES), 'episodes')
