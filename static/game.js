@@ -7,6 +7,126 @@
 "use strict";
 
 /* ══════════════════════════════════════════
+   SUPABASE AUTH
+══════════════════════════════════════════ */
+const SUPABASE_URL = "https://vmssbldsyrayluhdlfcy.supabase.co"; // ← ใส่ของจริง
+const SUPABASE_ANON_KEY = "sb_publishable_TIv965QLMmOiYfA71UUarg_vMacvbxx"; // ← ใส่ของจริง
+
+const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+let _accessToken = null; // เก็บ JWT ปัจจุบัน
+let _username = null; // เก็บ username ของผู้เล่น (โหลดจาก /api/profile)
+
+/* ── Login UI helpers ── */
+function showLoginMsg(msg, color = "#f87171") {
+  document.getElementById("login-msg").style.color = color;
+  document.getElementById("login-msg").textContent = msg;
+}
+
+function hideLoginScreen() {
+  document.getElementById("login-screen").style.display = "none";
+}
+
+/* ── Google Login ── */
+document.getElementById("google-btn").addEventListener("click", async () => {
+  const { error } = await _supabase.auth.signInWithOAuth({
+    provider: "google",
+    options: { redirectTo: window.location.origin },
+  });
+  if (error) showLoginMsg(error.message);
+});
+
+/* ── Discord Login ── */
+document.getElementById("discord-btn").addEventListener("click", async () => {
+  const btn = document.getElementById("discord-btn");
+  btn.disabled = true;
+  btn.textContent = "กำลังเชื่อมต่อ...";
+  const { error } = await _supabase.auth.signInWithOAuth({
+    provider: "discord",
+    options: { redirectTo: window.location.origin },
+  });
+  if (error) {
+    showLoginMsg(error.message);
+    btn.disabled = false;
+    btn.textContent = "เข้าสู่ระบบด้วย Discord";
+  }
+});
+
+/* ── Email OTP ── */
+let _otpEmail = "";
+document.getElementById("email-input").addEventListener("input", (e) => {
+  _otpEmail = e.target.value.trim();
+});
+
+document.getElementById("otp-send-btn").addEventListener("click", async () => {
+  const email = document.getElementById("email-input").value.trim();
+  if (!email) {
+    showLoginMsg("กรุณากรอกอีเมล");
+    return;
+  }
+
+  showLoginMsg("กำลังส่ง OTP...", "#fde68a");
+  const { error } = await _supabase.auth.signInWithOtp({ email });
+  if (error) {
+    showLoginMsg(error.message);
+  } else {
+    document.getElementById("email-step").style.display = "none";
+    document.getElementById("otp-step").style.display = "flex";
+    showLoginMsg("ส่ง OTP แล้ว ตรวจสอบอีเมลของคุณ", "#86efac");
+  }
+});
+
+document
+  .getElementById("otp-verify-btn")
+  .addEventListener("click", async () => {
+    const otp = document.getElementById("otp-input").value.trim();
+    if (otp.length !== 6) {
+      showLoginMsg("OTP ต้องมี 6 หลัก");
+      return;
+    }
+
+    showLoginMsg("กำลังยืนยัน...", "#fde68a");
+    const { data, error } = await _supabase.auth.verifyOtp({
+      email: _otpEmail,
+      token: otp,
+      type: "email",
+    });
+    if (error) {
+      showLoginMsg("OTP ไม่ถูกต้องหรือหมดอายุ");
+    } else {
+      _accessToken = data.session.access_token;
+      _booted = true;
+      hideLoginScreen();
+      checkProfile();
+    }
+  });
+
+/* ── Session restore (Google redirect / existing session) ── */
+let _booted = false; // กันไม่ให้ boot() ถูกเรียกซ้ำ
+
+async function initAuth() {
+  // ซ่อน loading overlay ระหว่างรอเช็ค session — จะแสดงใหม่ใน bootWithData
+  document.getElementById("loading-overlay").classList.add("hidden");
+
+  const {
+    data: { session },
+  } = await _supabase.auth.getSession();
+
+  if (session && !_booted) {
+    _booted = true;
+    _accessToken = session.access_token;
+    hideLoginScreen();
+    checkProfile();
+  }
+  // ถ้าไม่มี session → login screen แสดงอยู่แล้วโดย default
+}
+
+// Refresh token อัตโนมัติ (ไม่ boot ซ้ำ)
+_supabase.auth.onAuthStateChange((event, session) => {
+  if (session) _accessToken = session.access_token;
+});
+
+/* ══════════════════════════════════════════
    CONFIG
 ══════════════════════════════════════════ */
 const CONFIG = {
@@ -174,8 +294,11 @@ function showPlaceholderCharacter() {
 async function apiStart(forceNew = false) {
   const res = await fetch("/api/start", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ session_id: SESSION_ID, force_new: forceNew }),
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${_accessToken}`,
+    },
+    body: JSON.stringify({ force_new: forceNew }),
   });
   return res.json();
 }
@@ -183,10 +306,66 @@ async function apiStart(forceNew = false) {
 async function apiTalk(text) {
   const res = await fetch("/api/talk", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text, session_id: SESSION_ID }),
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${_accessToken}`,
+    },
+    body: JSON.stringify({ text, username: _username || "ผู้เล่น" }),
   });
   return res.json();
+}
+
+async function apiGetProfile() {
+  const res = await fetch("/api/profile", {
+    headers: { Authorization: `Bearer ${_accessToken}` },
+  });
+  return res.json();
+}
+
+async function apiSetProfile(username) {
+  const res = await fetch("/api/profile", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${_accessToken}`,
+    },
+    body: JSON.stringify({ username }),
+  });
+  return res.json();
+}
+
+async function apiGetSettings() {
+  const res = await fetch("/api/settings", {
+    headers: { Authorization: `Bearer ${_accessToken}` },
+  });
+  return res.json();
+}
+
+async function apiSetSettings(provider) {
+  const res = await fetch("/api/settings", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${_accessToken}`,
+    },
+    body: JSON.stringify({ llm_provider: provider }),
+  });
+  return res.json();
+}
+
+/* ── LLM provider state ── */
+let _llmProvider = "gemini";
+
+function setLlmProvider(provider) {
+  _llmProvider = provider;
+  document.querySelectorAll(".llm-btn").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.llm === provider);
+  });
+  const badge = document.getElementById("llm-badge");
+  if (badge) {
+    badge.textContent = provider === "typhoon" ? "Typhoon" : "Gemini";
+    badge.classList.toggle("typhoon", provider === "typhoon");
+  }
 }
 
 /* ══════════════════════════════════════════
@@ -208,10 +387,10 @@ function updateStats({ ap, tp, mood, moodCounter, episodeLabel }) {
     const color = CONFIG.MOOD_COLOR[mood] || "#6b9fd4";
     const MOOD_LABEL = {
       exasperated: "Exasperated",
-      neutral: "Indifferent",
+      neutral: "Neutral",
       sad: "Sad",
       happy: "Happy",
-      touched: "Smitten",
+      touched: "Touched",
     };
     DOM.moodDot.style.background = color;
     DOM.moodText.textContent = MOOD_LABEL[mood] || mood;
@@ -248,26 +427,28 @@ function streamText(el, text, speed = 22) {
 function addMessage(speaker, text, mood = "neutral", stream = false) {
   const isPlayer = speaker === "player";
 
-  const wrapper = document.createElement("div");
-  wrapper.className = `msg-bubble flex ${isPlayer ? "justify-end" : "justify-start"}`;
-
   if (isPlayer) {
+    const displayName = _username || "Player";
+    const nameColor = "#93c5fd"; // blue for player
+    const wrapper = document.createElement("div");
+    wrapper.className = "msg-row-player";
     wrapper.innerHTML = `
-      <div class="max-w-xs lg:max-w-sm px-2 py-1.5 text-sm leading-relaxed font-thai">
-        <span style="color:#f9a8d4;font-weight:600">Player : </span>
-        <span style="color:rgba(220,230,245,0.85)">${escHtml(text)}</span>
+      <div class="player-msg-wrap">
+        <div class="player-name-tag" style="color:${nameColor}">${escHtml(displayName)}</div>
+        <div class="player-bubble">${escHtml(text)}</div>
       </div>`;
     DOM.chatLog.appendChild(wrapper);
     DOM.chatLog.scrollTop = DOM.chatLog.scrollHeight;
     return Promise.resolve();
   }
 
+  // Fern
+  const wrapper = document.createElement("div");
+  wrapper.className = "msg-row-fern";
   wrapper.innerHTML = `
-    <div class="flex gap-2.5 max-w-xs lg:max-w-sm">
-      <div class="px-3 py-2.5 text-sm leading-relaxed font-thai" style="color:#e2eaf5">
-        <span style="color:#c084fc;font-weight:600">Fern : </span>
-        <span class="msg-body"></span>
-      </div>
+    <div class="fern-msg-wrap">
+      <div class="fern-name-tag">เฟิร์น</div>
+      <div class="fern-bubble"><span class="msg-body"></span></div>
     </div>`;
   DOM.chatLog.appendChild(wrapper);
   DOM.chatLog.scrollTop = DOM.chatLog.scrollHeight;
@@ -317,7 +498,7 @@ function setBusy(busy) {
   DOM.sendBtn.disabled = busy;
   DOM.input.disabled = busy;
   DOM.sendBtn.style.opacity = busy ? "0.5" : "1";
-  setStatus(busy ? "ฝนกำลังตอบ..." : "พิมพ์ข้อความถึงฝน");
+  setStatus(busy ? "เฟิร์นกำลังตอบ..." : "พิมพ์ข้อความถึงเฟิร์น");
 }
 
 function shakeScreen() {
@@ -377,13 +558,14 @@ const ENDING_DATA = {
   },
 };
 
-function showEnding(endingKey) {
+function showEnding(endingKey, endingTitle, endingText, endingSetting, endingMood) {
   const data = ENDING_DATA[endingKey] || {
-    emoji: "🌸",
-    title: endingKey,
-    color: "#c8dff5",
-    desc: "จบแล้ว",
+    emoji: "🌸", title: endingKey, color: "#c8dff5", desc: "จบแล้ว",
   };
+
+  const displayTitle = endingTitle || data.title;
+  const storyHtml    = endingText ? endingText.replace(/\n/g, "<br>") : data.desc;
+  const playerName   = _username || "ผู้เล่น";
 
   const overlay = document.createElement("div");
   overlay.style.cssText = `
@@ -391,35 +573,138 @@ function showEnding(endingKey) {
     background:rgba(5,13,26,0.92);
     display:flex;flex-direction:column;
     align-items:center;justify-content:center;
-    gap:1.5rem;
+    gap:1.5rem;padding:2rem;
     animation:fadeIn 1s ease forwards;
+    overflow-y:auto;
   `;
+
   overlay.innerHTML = `
     <div style="font-size:4rem;animation:glowPulse 2s ease-in-out infinite">${data.emoji}</div>
-    <div style="font-family:'Playfair Display',serif;font-style:italic;font-size:2rem;color:${data.color}">
-      ${data.title}
-    </div>
-    <p style="font-family:'Sarabun',sans-serif;font-size:0.95rem;color:rgba(200,223,245,0.7);
-              max-width:320px;text-align:center;line-height:1.8">
-      ${data.desc}
+    <div style="font-family:'Playfair Display',serif;font-style:italic;font-size:1.8rem;
+                color:${data.color};text-align:center">${displayTitle}</div>
+    <p style="font-family:'Sarabun',sans-serif;font-size:0.92rem;
+              color:rgba(200,223,245,0.75);max-width:320px;text-align:center;line-height:2">
+      ${storyHtml}
     </p>
-    <div style="margin-top:1rem;display:flex;gap:0.75rem">
-      <button id="replay-btn"
-        style="font-family:'Sarabun',sans-serif;
-               padding:0.6rem 1.6rem;border-radius:999px;
-               background:rgba(42,82,152,0.5);
-               border:1px solid rgba(107,159,212,0.35);
-               color:#c8dff5;font-size:0.875rem;cursor:pointer;">
-        เล่นใหม่
-      </button>
-    </div>`;
+
+    <!-- ─── Gift Section ─── -->
+    <div id="gift-section" style="
+      width:100%;max-width:340px;
+      background:rgba(255,255,255,0.04);
+      border:1px solid rgba(200,223,245,0.15);
+      border-radius:16px;padding:1.25rem 1rem;
+      display:flex;flex-direction:column;align-items:center;gap:0.75rem;
+    ">
+      <p style="font-family:'Sarabun',sans-serif;font-size:0.88rem;
+                color:rgba(200,223,245,0.85);text-align:center;line-height:1.7;margin:0">
+        <span style="color:${data.color};font-weight:600">${escHtmlSimple(playerName)}</span>
+        จะให้ของขวัญอะไรกับเฟิร์นก่อนลาจากกันไหม?
+      </p>
+      <div style="display:flex;gap:0.5rem;width:100%">
+        <input id="gift-input" type="text" maxlength="50"
+          placeholder="เช่น ดอกไม้ป่า, ขนมหวาน, หนังสือเวท..."
+          style="flex:1;padding:0.55rem 0.85rem;border-radius:10px;border:1px solid rgba(200,223,245,0.2);
+                 background:rgba(255,255,255,0.06);color:#e2e8f0;
+                 font-family:'Sarabun',sans-serif;font-size:0.85rem;outline:none;"/>
+        <button id="gift-send-btn"
+          style="padding:0.55rem 1rem;border-radius:10px;border:none;
+                 background:rgba(42,82,152,0.6);color:#c8dff5;
+                 font-family:'Sarabun',sans-serif;font-size:0.85rem;cursor:pointer;
+                 white-space:nowrap;">
+          มอบให้
+        </button>
+      </div>
+      <div id="gift-status" style="font-size:0.78rem;color:rgba(200,223,245,0.5);min-height:1rem"></div>
+      <div id="gift-img-wrap" style="width:100%;display:none">
+        <img id="gift-img" src="" alt="gift" style="
+          width:100%;border-radius:12px;
+          box-shadow:0 0 24px rgba(200,223,245,0.15);
+          animation:fadeIn 0.8s ease;
+        "/>
+        <p id="gift-caption" style="
+          font-family:'Sarabun',sans-serif;font-size:0.8rem;
+          color:rgba(200,223,245,0.55);text-align:center;margin-top:0.5rem;
+        "></p>
+      </div>
+    </div>
+
+    <!-- ─── Replay Button ─── -->
+    <button id="replay-btn"
+      style="font-family:'Sarabun',sans-serif;
+             padding:0.6rem 1.6rem;border-radius:999px;
+             background:rgba(42,82,152,0.5);
+             border:1px solid rgba(107,159,212,0.35);
+             color:#c8dff5;font-size:0.875rem;cursor:pointer;">
+      เล่นใหม่
+    </button>
+  `;
+
   document.body.appendChild(overlay);
 
-  // เล่นใหม่: สร้าง session ใหม่แทน reload
-  overlay.querySelector("#replay-btn").addEventListener("click", () => {
+  /* ── Gift submit ── */
+  const giftInput   = overlay.querySelector("#gift-input");
+  const giftSendBtn = overlay.querySelector("#gift-send-btn");
+  const giftStatus  = overlay.querySelector("#gift-status");
+  const giftImgWrap = overlay.querySelector("#gift-img-wrap");
+  const giftImg     = overlay.querySelector("#gift-img");
+  const giftCaption = overlay.querySelector("#gift-caption");
+
+  async function submitGift() {
+    const obj = giftInput.value.trim();
+    if (!obj) { giftStatus.textContent = "พิมพ์ชื่อของขวัญก่อนนะคะ"; return; }
+
+    giftSendBtn.disabled = true;
+    giftInput.disabled   = true;
+    giftStatus.textContent = "✨ กำลังสร้างภาพ...";
+
+    try {
+      const res  = await fetch("/api/gift", {
+        method  : "POST",
+        headers : { "Content-Type": "application/json", Authorization: `Bearer ${_accessToken}` },
+        body    : JSON.stringify({ object: obj, mood: endingMood || "neutral", setting: endingSetting }),
+      });
+      const data = await res.json();
+
+      if (data.error) {
+        giftStatus.textContent = `เกิดข้อผิดพลาด: ${data.error}`;
+        giftSendBtn.disabled = false;
+        giftInput.disabled   = false;
+        return;
+      }
+
+      giftImg.src         = data.image;
+      giftCaption.textContent = `"${obj}" — ของขวัญจาก ${playerName}`;
+      giftImgWrap.style.display = "block";
+      giftStatus.textContent    = "";
+      giftSendBtn.style.display = "none";
+      giftInput.style.display   = "none";
+
+    } catch (err) {
+      giftStatus.textContent = "ไม่สามารถเชื่อมต่อได้ กรุณาลองใหม่";
+      giftSendBtn.disabled = false;
+      giftInput.disabled   = false;
+    }
+  }
+
+  giftSendBtn.addEventListener("click", submitGift);
+  giftInput.addEventListener("keydown", (e) => { if (e.key === "Enter") submitGift(); });
+
+  /* ── Replay ── */
+  overlay.querySelector("#replay-btn").addEventListener("click", async () => {
     overlay.remove();
-    sessionStorage.removeItem("fon_sid");
-    location.reload();
+    sessionStorage.removeItem("fern_sid");
+    DOM.chatLog.innerHTML = `<div style="text-align:center;font-size:0.68rem;
+      color:rgba(255,255,255,0.18);padding:6px 0;letter-spacing:0.12em">
+      ✦ เริ่มต้นการสนทนา ✦</div>`;
+    DOM.loading.classList.remove("hidden");
+    DOM.root.style.opacity = "0";
+    try {
+      const freshData = await apiStart(true);
+      bootWithData(freshData);
+    } catch (e) {
+      console.error("restart error:", e);
+      location.reload();
+    }
   });
 }
 
@@ -483,7 +768,7 @@ async function handleSend() {
 
     if (res.ap_change < -4 || res.tp_change < -4) shakeScreen();
 
-    await addMessage("fon", res.reaction, res.mood, true);
+    await addMessage("fern", res.reaction, res.mood, true);
 
     const apSign = res.ap_change >= 0 ? `+${res.ap_change}` : res.ap_change;
     const tpSign = res.tp_change >= 0 ? `+${res.tp_change}` : res.tp_change;
@@ -505,16 +790,19 @@ async function handleSend() {
         await addSystemMessage(res.new_ep_context, "#64748b", true);
       if (res.new_ep_narrative)
         await addSystemMessage(res.new_ep_narrative, "#94a3b8", true);
-      if (res.new_ep_hint) addSystemMessage("💡 " + res.new_ep_hint, "#fde68a");
+      if (res.new_ep_hint) showHintChips(res.new_ep_hint);
       if (res.new_ep_intro)
-        await addMessage("fon", res.new_ep_intro, res.mood, true);
+        await addMessage("fern", res.new_ep_intro, res.mood, true);
     }
 
     /* ── Ending ── */
     if (res.event === "ending") {
       if (res.ending === "warm_a") applyMoodToLive2D("happy");
       else if (res.ending === "cold_c") applyMoodToLive2D("sad");
-      setTimeout(() => showEnding(res.ending), 1200);
+      setTimeout(
+        () => showEnding(res.ending, res.ending_title, res.ending_text,res.ending_setting || "",state.mood),
+        1200,
+      );
     }
   } catch (err) {
     console.error("apiTalk error:", err);
@@ -566,24 +854,24 @@ async function pollBgJob(jobId) {
 
       if (data.status === "done") {
         if (data.image) applyBgImage(data.image);
-        setStatus("พิมพ์ข้อความถึงฝน");
+        setStatus("พิมพ์ข้อความถึงเฟิร์น");
         return;
       }
       if (data.status === "error" || data.status === "not_found") {
         console.warn("BG job failed:", data.status);
-        setStatus("พิมพ์ข้อความถึงฝน");
+        setStatus("พิมพ์ข้อความถึงเฟิร์น");
         return;
       }
       // status === "pending" → loop ต่อ
     } catch (err) {
       console.warn("BG poll error:", err.message);
-      setStatus("พิมพ์ข้อความถึงฝน");
+      setStatus("พิมพ์ข้อความถึงเฟิร์น");
       return;
     }
   }
   // หมดรอบ poll
   console.warn("BG job timed out after polling");
-  setStatus("พิมพ์ข้อความถึงฝน");
+  setStatus("พิมพ์ข้อความถึงเฟิร์น");
 }
 
 async function loadBackground(prompt) {
@@ -602,7 +890,7 @@ async function loadBackground(prompt) {
 
     if (!res.ok) {
       console.warn("BG request error:", res.status);
-      setStatus("พิมพ์ข้อความถึงฝน");
+      setStatus("พิมพ์ข้อความถึงเฟิร์น");
       return;
     }
 
@@ -613,7 +901,7 @@ async function loadBackground(prompt) {
     }
   } catch (err) {
     console.warn("BG failed:", err.message);
-    setStatus("พิมพ์ข้อความถึงฝน");
+    setStatus("พิมพ์ข้อความถึงเฟิร์น");
   }
 }
 
@@ -629,10 +917,7 @@ DOM.input.addEventListener("keydown", (e) => {
   }
 });
 
-DOM.input.addEventListener("input", () => {
-  DOM.input.style.height = "auto";
-  DOM.input.style.height = Math.min(DOM.input.scrollHeight, 96) + "px";
-});
+// NOTE: DOM.input "input" event wired in showHintChips section below
 
 /* ══════════════════════════════════════════
    VIEW MODE — fullbody / half / closeup
@@ -661,20 +946,301 @@ function applyViewMode(mode, app) {
   else m.y = H * 0.25;
 }
 
-document.querySelectorAll("#view-radio input[type=radio]").forEach((radio) => {
-  radio.addEventListener("change", () => {
-    if (radio.checked && state._app) applyViewMode(radio.value, state._app);
+/* ══════════════════════════════════════════
+   HUD POPUPS — camera + settings
+══════════════════════════════════════════ */
+(function setupHudPopups() {
+  const backdrop = document.getElementById("hud-backdrop");
+  const cameraBtn = document.getElementById("camera-btn");
+  const settingsBtn = document.getElementById("settings-btn");
+  const cameraPopup = document.getElementById("camera-popup");
+  const settingsPopup = document.getElementById("settings-popup");
+
+  function closeAll() {
+    cameraPopup.classList.add("hidden");
+    settingsPopup.classList.add("hidden");
+    cameraBtn.classList.remove("active");
+    settingsBtn.classList.remove("active");
+    backdrop.classList.remove("active");
+  }
+
+  function toggle(popup, btn) {
+    const isOpen = !popup.classList.contains("hidden");
+    closeAll();
+    if (!isOpen) {
+      popup.classList.remove("hidden");
+      btn.classList.add("active");
+      backdrop.classList.add("active");
+    }
+  }
+
+  cameraBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    toggle(cameraPopup, cameraBtn);
   });
-});
+  settingsBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    toggle(settingsPopup, settingsBtn);
+  });
+  backdrop.addEventListener("click", closeAll);
+
+  // LLM provider buttons inside settings popup
+  document.querySelectorAll(".llm-btn").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const provider = btn.dataset.llm;
+      if (provider === _llmProvider) return;
+      setLlmProvider(provider);
+      try {
+        await apiSetSettings(provider);
+        const label = provider === "gemini" ? "Gemini ✦" : "Typhoon 🌪️";
+        showToast(`AI: ${label}`);
+        if (DOM.status) DOM.status.textContent = `AI Model: ${label}`;
+      } catch (e) {
+        console.error("setSettings error:", e);
+      }
+      closeAll();
+    });
+  });
+
+  // View mode buttons inside camera popup
+  cameraPopup.querySelectorAll(".view-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      cameraPopup
+        .querySelectorAll(".view-btn")
+        .forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      if (state._app) applyViewMode(btn.dataset.mode, state._app);
+      closeAll();
+    });
+  });
+})();
+
+/* ── Logout ── */
+function logout() {
+  _supabase.auth.signOut().then(() => {
+    _accessToken = null;
+    _booted = false;
+    location.reload();
+  });
+}
+document.getElementById("logout-btn").addEventListener("click", logout);
+
+/* ══════════════════════════════════════════
+   USERNAME SCREEN
+══════════════════════════════════════════ */
+
+/**
+ * checkProfile() — เรียกหลัง login สำเร็จเสมอ
+ * ถ้ามี username อยู่แล้ว → boot() เลย
+ * ถ้าไม่มี            → แสดง #username-screen ก่อน
+ */
+async function checkProfile() {
+  try {
+    const data = await apiGetProfile();
+    if (data.username) {
+      _username = data.username;
+      document.getElementById("loading-overlay").classList.remove("hidden");
+      boot();
+    } else {
+      showUsernameScreen();
+    }
+  } catch (err) {
+    console.error("checkProfile error:", err);
+    // fallback: เข้าเกมโดยไม่มี username
+    document.getElementById("loading-overlay").classList.remove("hidden");
+    boot();
+  }
+}
+
+function showUsernameScreen() {
+  document.getElementById("username-screen").style.display = "block";
+
+  const input = document.getElementById("username-input");
+  const counter = document.getElementById("un-char-count");
+  const counterWrap = input
+    .closest(".ls-form-group")
+    .querySelector(".un-char-counter");
+  const confirmBtn = document.getElementById("username-confirm-btn");
+  const randomizeBtn = document.getElementById("randomize-btn");
+
+  // Random Thai-flavored names pool
+  const RANDOM_NAMES = [
+    "ดาวพระศุกร์",
+    "มณีแดง",
+    "ลมฝน",
+    "หิมะ",
+    "ทิพย์",
+    "ดาว",
+    "จันทร์",
+    "ฟ้า",
+    "น้ำฝน",
+    "พลอย",
+    "ปาน",
+    "มิ้น",
+    "ไอซ์",
+    "มาย",
+    "นุ้ย",
+    "บิ๊ก",
+    "เนม",
+    "ไมค์",
+    "โบ",
+    "แพร",
+    "แก้ว",
+    "กุ้ง",
+    "ปู",
+    "บีม",
+    "เอิ้น",
+  ];
+
+  // Disabled state — enable only when input >= 2 chars
+  function updateBtnState() {
+    const len = input.value.trim().length;
+    confirmBtn.disabled = len < 2;
+  }
+
+  input.addEventListener("input", () => {
+    const len = input.value.length;
+    counter.textContent = len;
+    counterWrap.classList.toggle("warn", len >= 16);
+    updateBtnState();
+  });
+
+  // Randomize button
+  randomizeBtn.addEventListener("click", () => {
+    const name = RANDOM_NAMES[Math.floor(Math.random() * RANDOM_NAMES.length)];
+    input.value = name;
+    counter.textContent = name.length;
+    counterWrap.classList.toggle("warn", name.length >= 16);
+    updateBtnState();
+    input.focus();
+  });
+
+  // Enter key
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !confirmBtn.disabled) {
+      e.preventDefault();
+      showUsernameConfirmModal(input.value.trim());
+    }
+  });
+
+  document
+    .getElementById("username-confirm-btn")
+    .addEventListener("click", () => {
+      if (!confirmBtn.disabled) showUsernameConfirmModal(input.value.trim());
+    });
+
+  // focus หลัง render
+  setTimeout(() => input.focus(), 80);
+}
+
+/* ── Confirmation modal ── */
+function showUsernameConfirmModal(username) {
+  if (!username) return;
+
+  // faux-viewport overlay (ไม่ใช้ position:fixed)
+  const overlay = document.createElement("div");
+  overlay.style.cssText = [
+    "position:fixed",
+    "inset:0",
+    "z-index:200",
+    "background:rgba(0,0,0,0.45)",
+    "display:flex",
+    "align-items:center",
+    "justify-content:center",
+    "padding:24px",
+  ].join(";");
+
+  overlay.innerHTML = `
+    <div style="background:#fff;border-radius:16px;padding:24px 22px;max-width:320px;width:100%;font-family:Sarabun,sans-serif;">
+      <p style="font-size:0.85rem;color:#6b7280;margin-bottom:10px;text-align:center">ยืนยันชื่อตัวละคร</p>
+      <p style="font-size:1.4rem;font-weight:600;color:#0f1523;text-align:center;margin-bottom:8px">"${escHtmlSimple(username)}"</p>
+      <p style="font-size:0.78rem;color:#d97706;text-align:center;margin-bottom:20px;line-height:1.5;background:#fffbeb;border-radius:8px;padding:8px 10px;">
+        ชื่อนี้ไม่สามารถเปลี่ยนได้ภายหลัง
+      </p>
+      <div style="display:flex;gap:10px">
+        <button id="modal-cancel" style="flex:1;padding:11px;border-radius:10px;border:1.5px solid #d1d5db;background:#fff;color:#374151;font-family:Sarabun,sans-serif;font-size:0.9rem;cursor:pointer;">แก้ไข</button>
+        <button id="modal-confirm" style="flex:1;padding:11px;border-radius:10px;border:none;background:#2563eb;color:#fff;font-family:Sarabun,sans-serif;font-size:0.9rem;font-weight:600;cursor:pointer;">ยืนยัน</button>
+      </div>
+    </div>`;
+
+  document.body.appendChild(overlay);
+
+  overlay
+    .querySelector("#modal-cancel")
+    .addEventListener("click", () => overlay.remove());
+  overlay.querySelector("#modal-confirm").addEventListener("click", () => {
+    overlay.remove();
+    handleUsernameConfirm(username);
+  });
+}
+
+function escHtmlSimple(s) {
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+async function handleUsernameConfirm(username) {
+  const input = document.getElementById("username-input");
+  const errorEl = document.getElementById("username-error");
+  const btn = document.getElementById("username-confirm-btn");
+  if (!username) username = input.value.trim();
+
+  // reset error
+  errorEl.style.display = "none";
+  errorEl.textContent = "";
+
+  if (!username) {
+    errorEl.textContent = "กรุณาใส่ชื่อก่อนนะคะ";
+    errorEl.style.display = "block";
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = "กำลังบันทึก...";
+
+  try {
+    const data = await apiSetProfile(username);
+
+    if (data.error) {
+      errorEl.textContent =
+        data.error === "username นี้ถูกใช้แล้ว"
+          ? "ชื่อนี้มีคนใช้แล้วค่ะ ลองชื่ออื่นดูนะคะ"
+          : data.error;
+      errorEl.style.display = "block";
+      btn.disabled = false;
+      btn.textContent = "เริ่มการเดินทาง";
+      return;
+    }
+
+    _username = data.username;
+    document.getElementById("username-screen").style.display = "none";
+    document.getElementById("loading-overlay").classList.remove("hidden");
+    boot();
+  } catch (err) {
+    console.error("handleUsernameConfirm error:", err);
+    errorEl.textContent = "เกิดข้อผิดพลาด กรุณาลองใหม่";
+    errorEl.style.display = "block";
+    btn.disabled = false;
+    btn.textContent = "เริ่มการเดินทาง";
+  }
+}
 
 /* ══════════════════════════════════════════
    BOOT SEQUENCE
 ══════════════════════════════════════════ */
 async function boot() {
+  // Guard: ถ้าไม่มี token หยุดทันที
+  if (!_accessToken) {
+    console.warn("boot() called without token — aborting");
+    return;
+  }
+
   initLive2D();
 
   // ถ้า game_over ค้างจาก session ก่อน → force สร้างใหม่
-  const isReturning = sessionStorage.getItem("fon_sid") !== null;
+  const isReturning = sessionStorage.getItem("fern_sid") !== null;
 
   try {
     const startData = await apiStart(false);
@@ -696,6 +1262,10 @@ async function boot() {
 
 async function bootWithData(startData) {
   if (startData.episode) state.episode = startData.episode;
+
+  // sync llm_provider จาก server → update UI badge + popup
+  if (startData.llm_provider) setLlmProvider(startData.llm_provider);
+
   updateStats({
     ap: startData.ap ?? 20,
     tp: startData.tp ?? 20,
@@ -710,16 +1280,107 @@ async function bootWithData(startData) {
   DOM.root.style.opacity = "1";
   DOM.input.focus();
 
+  // แสดง AP/TP tutorial ครั้งแรก
+  if (!sessionStorage.getItem("apt_seen")) {
+    document.getElementById("ap-tp-tutorial").classList.remove("hidden");
+    document.getElementById("ap-tp-dismiss").addEventListener("click", () => {
+      document.getElementById("ap-tp-tutorial").classList.add("hidden");
+      sessionStorage.setItem("apt_seen", "1");
+    });
+  }
+
   if (startData.context)
     await addSystemMessage(startData.context, "#64748b", true);
   if (startData.narrative)
     await addSystemMessage(startData.narrative, "#94a3b8", true);
-  if (startData.hint) addSystemMessage(`💡 ${startData.hint}`, "#fde68a");
-  if (startData.intro_text)
-    await addMessage("fon", startData.intro_text, "neutral", true);
+  if (startData.hint) showHintChips(startData.hint);
+
+  if (startData.is_resuming && startData.raw_turns?.length > 0) {
+    // กลับมากลางคัน — restore บทสนทนาที่ค้างไว้
+    addSystemMessage("✦ สนทนาต่อจากเดิม ✦", "rgba(255,255,255,0.18)");
+    for (const turn of startData.raw_turns) {
+      await addMessage("player", turn.player);
+      await addMessage("fern", turn.fern, turn.mood || "neutral");
+    }
+  } else if (startData.intro_text) {
+    await addMessage("fern", startData.intro_text, "neutral", true);
+  }
+}
+
+/* ══════════════════════════════════════════
+   HINT CHIPS SYSTEM
+══════════════════════════════════════════ */
+function showHintChips(hintText) {
+  const container = document.getElementById("hint-chips");
+  const row = document.getElementById("hint-chips-row");
+  if (!container || !row) return;
+
+  // parse hint: "หยิบคทาให้เธอ หรือ ถามว่าเกิดอะไรขึ้น"
+  // split on " หรือ " or " / "
+  const parts = hintText
+    .split(/\s+หรือ\s+|\s*\/\s*/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  if (parts.length === 0) {
+    // ถ้า parse ไม่ออก แสดง hint เดิมเป็น chip เดียว
+    parts.push(hintText.replace(/^💡\s*/, "").trim());
+  }
+
+  row.innerHTML = "";
+  parts.forEach((part) => {
+    const chip = document.createElement("button");
+    chip.className = "hint-chip";
+    chip.textContent = part;
+    chip.addEventListener("click", () => {
+      DOM.input.value = part;
+      DOM.input.dispatchEvent(new Event("input"));
+      DOM.input.focus();
+      // hide chips after selection
+      container.classList.add("hidden");
+    });
+    row.appendChild(chip);
+  });
+
+  container.classList.remove("hidden");
+}
+
+// hide hint chips when user starts typing manually
+DOM.input.addEventListener("input", () => {
+  DOM.input.style.height = "auto";
+  DOM.input.style.height = Math.min(DOM.input.scrollHeight, 96) + "px";
+  if (DOM.input.value.trim().length > 0) {
+    const container = document.getElementById("hint-chips");
+    if (container) container.classList.add("hidden");
+  }
+});
+
+/* ── Signup hint link ── */
+const signupLink = document.getElementById("signup-hint-link");
+if (signupLink) {
+  signupLink.addEventListener("click", (e) => {
+    e.preventDefault();
+    // เปลี่ยน title และ subtitle ให้รู้สึกเหมือน register flow
+    const titleEl = document.querySelector(".ls-title");
+    const subtitleEl = document.querySelector(".ls-subtitle");
+    if (titleEl) titleEl.textContent = "สร้างบัญชีใหม่";
+    if (subtitleEl) subtitleEl.textContent = "เลือกวิธีสมัครสมาชิก";
+    signupLink.closest(".ls-signup-link").textContent = "มีบัญชีอยู่แล้ว? ";
+    const loginLink = document.createElement("a");
+    loginLink.href = "#";
+    loginLink.textContent = "เข้าสู่ระบบ";
+    loginLink.style.cssText =
+      "color:#2563eb;font-weight:600;text-decoration:none";
+    loginLink.addEventListener("click", (ev) => {
+      ev.preventDefault();
+      location.reload();
+    });
+    signupLink.closest(".ls-signup-link").appendChild(loginLink);
+  });
 }
 
 /* ══════════════════════════════════════════
    KICK OFF
 ══════════════════════════════════════════ */
-window.addEventListener("DOMContentLoaded", boot);
+window.addEventListener("DOMContentLoaded", initAuth);
+// boot() จะถูกเรียกจาก initAuth เมื่อ login สำเร็จ

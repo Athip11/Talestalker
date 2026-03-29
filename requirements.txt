@@ -10,3 +10,5 @@ transformers
 accelerate
 pyngrok
 waitress
+python-jose[cryptography]
+supabase

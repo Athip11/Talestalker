@@ -1,151 +1,206 @@
-# ════════════════════════════════════════════════
-# app.py — Flask Server
-# ════════════════════════════════════════════════
-import requests, os, threading, uuid, time
+from dotenv import load_dotenv
+load_dotenv()
+
+from game.character import call_fern, summarize_ep, generate_gift_image
+import base64
 from flask import Flask, request, jsonify, send_from_directory
-from flask_cors import CORS
 from game.state import GameState
+from game.auth import (
+    require_auth,
+    load_game_state, save_game_state,
+    get_username, save_username,
+    get_llm_setting, save_llm_setting,
+    get_turns, get_summaries,
+)
+import os
 
-# ── Init app ─────────────────────────────────────────────────────────
-app = Flask(__name__, static_folder='static')
-CORS(app)
+# BG server URL — ชี้ไปที่ ngrok URL ของ bg_server.py ที่รันบนเครื่องตัวเอง
+# ตั้งค่าผ่าน environment variable BG_SERVER_URL ใน Railway
+# เช่น BG_SERVER_URL=https://xxxx.ngrok-free.app
+BG_SERVER_URL = os.environ.get("BG_SERVER_URL", "http://localhost:5001")
 
-# BG_SERVER: ตอน local ใช้ localhost, ตอน deploy ใส่ ngrok URL ใน env var
-BG_SERVER = os.getenv('BG_SERVER', 'http://localhost:5001/generate')
+app = Flask(__name__, static_folder="static")
 
-# ── In-memory stores ─────────────────────────────────────────────────
-sessions:  dict[str, dict]  = {}   # sid → {gs: GameState, last_seen: float}
-bg_jobs:   dict[str, dict]  = {}   # job_id → {status, image, created_at}
-
-SESSION_TTL = 3600      # ลบ session ที่ไม่ active > 1 ชั่วโมง
-BG_JOB_TTL  = 1800      # ลบ bg job ที่เก่า > 30 นาที
-
-
-# ── Background cleanup thread ────────────────────────────────────────
-def _cleanup_loop():
-    while True:
-        time.sleep(300)   # ทำงานทุก 5 นาที
-        now = time.time()
-
-        expired_sessions = [
-            sid for sid, v in list(sessions.items())
-            if now - v['last_seen'] > SESSION_TTL
-        ]
-        for sid in expired_sessions:
-            sessions.pop(sid, None)
-
-        expired_jobs = [
-            jid for jid, v in list(bg_jobs.items())
-            if now - v.get('created_at', 0) > BG_JOB_TTL
-        ]
-        for jid in expired_jobs:
-            bg_jobs.pop(jid, None)
-
-        if expired_sessions or expired_jobs:
-            print(f'[cleanup] removed {len(expired_sessions)} sessions, '
-                  f'{len(expired_jobs)} bg jobs')
-
-threading.Thread(target=_cleanup_loop, daemon=True).start()
+sessions: dict[str, GameState] = {}
 
 
-# ── Helpers ───────────────────────────────────────────────────────────
-def _get_or_create_session(sid: str, force_new: bool = False) -> GameState:
-    if sid not in sessions or force_new:
-        sessions[sid] = {'gs': GameState(), 'last_seen': time.time()}
-    else:
-        sessions[sid]['last_seen'] = time.time()
-    return sessions[sid]['gs']
+def get_or_create_state(user_id: str) -> GameState:
+    if user_id not in sessions:
+        gs          = GameState()
+        gs.user_id  = user_id
+
+        # โหลด summaries ทุก EP ที่ผ่านมา → inject memory
+        gs.summaries = get_summaries(user_id)
+
+        # โหลด LLM preference จาก DB
+        gs.llm_provider = get_llm_setting(user_id)
+
+        # โหลด game state จาก DB
+        saved = load_game_state(user_id)
+        if saved and not saved["game_over"]:
+            gs.ap            = saved["ap"]
+            gs.tp            = saved["tp"]
+            gs.current_ep_id = saved["episode"]
+            gs.mood_counter  = saved["mood_counter"]
+            gs.turn          = saved["turn"]
+            gs.route         = saved["route"]
+
+        sessions[user_id] = gs
+    return sessions[user_id]
 
 
-# ── Routes ────────────────────────────────────────────────────────────
-@app.route('/')
-def index():
-    return send_from_directory('static', 'index.html')
+# ══════════════════════════════════════════
+#  PROFILE — username
+# ══════════════════════════════════════════
+
+@app.route("/api/profile", methods=["GET"])
+@require_auth
+def api_get_profile():
+    username = get_username(request.user_id)
+    return jsonify({"username": username})
 
 
-@app.route('/motion_viewer')
-def motion_viewer():
-    return send_from_directory('.', 'motion_viewer.html')
+@app.route("/api/profile", methods=["POST"])
+@require_auth
+def api_set_profile():
+    username = (request.json or {}).get("username", "").strip()
+    if not username:
+        return jsonify({"error": "username required"}), 400
+    if len(username) > 20:
+        return jsonify({"error": "username ยาวเกิน 20 ตัวอักษร"}), 400
+
+    ok = save_username(request.user_id, username)
+    if not ok:
+        return jsonify({"error": "username นี้ถูกใช้แล้ว"}), 409
+    return jsonify({"username": username})
 
 
-@app.route('/api/start', methods=['POST'])
-def start():
-    data      = request.get_json(silent=True) or {}
-    sid       = data.get('session_id', 'default')
-    force_new = data.get('force_new', False)
+# ══════════════════════════════════════════
+#  SETTINGS — LLM provider
+# ══════════════════════════════════════════
 
-    gs = _get_or_create_session(sid, force_new)
+@app.route("/api/settings", methods=["GET"])
+@require_auth
+def api_get_settings():
+    """คืน settings ปัจจุบันของ user"""
+    provider = get_llm_setting(request.user_id)
+    return jsonify({"llm_provider": provider})
+
+
+@app.route("/api/settings", methods=["POST"])
+@require_auth
+def api_set_settings():
+    """อัปเดต settings — รองรับ llm_provider: 'gemini' | 'typhoon'"""
+    body     = request.json or {}
+    provider = body.get("llm_provider", "").strip().lower()
+
+    if provider not in ("gemini", "typhoon"):
+        return jsonify({"error": "llm_provider ต้องเป็น 'gemini' หรือ 'typhoon'"}), 400
+
+    ok = save_llm_setting(request.user_id, provider)
+    if not ok:
+        return jsonify({"error": "บันทึก settings ไม่สำเร็จ"}), 500
+
+    # อัปเดต session ที่กำลังใช้งานอยู่ทันที (ถ้ามี)
+    user_id = request.user_id
+    if user_id in sessions:
+        sessions[user_id].llm_provider = provider
+
+    return jsonify({"llm_provider": provider})
+
+
+# ══════════════════════════════════════════
+#  GAME
+# ══════════════════════════════════════════
+
+@app.route("/api/start", methods=["POST"])
+@require_auth
+def api_start():
+    user_id = request.user_id
+    force   = (request.json or {}).get("force_new", False)
+
+    # Safety net: ถ้า DB บอก game_over=True แต่ force=False → reset อัตโนมัติ
+    if not force:
+        saved = load_game_state(user_id)
+        if saved and saved.get("game_over"):
+            force = True
+
+    if force:
+        if user_id in sessions:
+            del sessions[user_id]
+        from game.auth import supabase
+        supabase.table("game_states").delete().eq("user_id", user_id).execute()
+        supabase.table("chat_history").delete().eq("user_id", user_id).execute()
+
+    gs = get_or_create_state(user_id)
     ep = gs.current_ep()
 
+    # ── กลับมากลางคัน: ดึง raw turns แทน intro ──
+    is_resuming = gs.turn > 0
+    raw_turns   = get_turns(user_id, gs.current_ep_id) if is_resuming else []
+
     return jsonify({
-        'episode'      : gs.current_ep_id,
-        'episode_label': gs.episode_label(),
-        'intro_text'   : ep['fern_intro'],
-        'ap'           : gs.ap,
-        'tp'           : gs.tp,
-        'turn'         : gs.turn,
-        'context'      : ep.get('context', ''),
-        'narrative'    : ep['narrative'],
-        'hint'         : ep['hint'],
-        'bg_prompt'    : ep.get('bg_prompt', ''),
+        "ap"           : gs.ap,
+        "tp"           : gs.tp,
+        "episode"      : gs.current_ep_id,
+        "episode_label": gs.episode_label(),
+        "bg_prompt"    : ep.get("bg_prompt", ""),
+        "context"      : ep.get("context", ""),
+        "narrative"    : ep.get("narrative", ""),
+        "hint"         : ep.get("hint", ""),
+        "intro_text"   : ep.get("fern_intro", "") if not is_resuming else "",
+        "raw_turns"    : raw_turns,
+        "is_resuming"  : is_resuming,
+        "llm_provider" : gs.llm_provider,
     })
 
 
-@app.route('/api/talk', methods=['POST'])
-def talk():
-    data = request.get_json(silent=True) or {}
-    sid  = data.get('session_id', 'default')
-    text = data.get('text', '').strip()
-
+@app.route("/api/talk", methods=["POST"])
+@require_auth
+def api_talk():
+    user_id  = request.user_id
+    text     = (request.json or {}).get("text", "").strip()
+    username = (request.json or {}).get("username", "ผู้เล่น")
     if not text:
-        return jsonify({'error': 'empty text'}), 400
+        return jsonify({"error": "empty input"}), 400
 
-    gs     = _get_or_create_session(sid)
+    gs = get_or_create_state(user_id)
+
+    # sync llm_provider จาก DB ทุก request — ป้องกัน multi-process/worker ไม่ sync
+    gs.llm_provider = get_llm_setting(user_id)
+
     result = gs.process_turn(text)
+
+    save_game_state(user_id, gs)
+
+    result["username"] = username
     return jsonify(result)
 
 
-@app.route('/api/bg', methods=['POST'])
-def generate_bg():
-    data   = request.get_json(silent=True) or {}
-    prompt = data.get('prompt', 'rainy night atmospheric')
+@app.route("/")
+def index():
+    return send_from_directory("static", "index.html")
 
-    full_prompt = (
-        f"{prompt}, visual novel background, anime style, "
-        "masterpiece, best quality, highly detailed, "
-        "no characters, no people, no text, "
-        "cinematic lighting, atmospheric, 8k"
-    )
+@app.route("/api/gift", methods=["POST"])
+@require_auth
+def api_gift():
+    body    = request.json or {}
+    obj     = body.get("object", "").strip()
+    mood    = body.get("mood", "neutral")
+    setting = body.get("setting", "")
 
-    job_id = str(uuid.uuid4())[:8]
-    bg_jobs[job_id] = {
-        'status'    : 'pending',
-        'image'     : None,
-        'created_at': time.time()
-    }
+    if not obj:
+        return jsonify({"error": "object required"}), 400
+    if len(obj) > 50:
+        return jsonify({"error": "ไม่สามารถให้ของขวัญชนิดนี้ได้"}), 400
 
-    def run():
-        try:
-            resp = requests.post(BG_SERVER, json={'prompt': full_prompt}, timeout=600)
-            if resp.status_code == 200:
-                bg_jobs[job_id].update({'status': 'done', 'image': resp.json().get('image')})
-            else:
-                bg_jobs[job_id].update({'status': 'error'})
-        except Exception as e:
-            print(f'BG job {job_id} failed: {e}')
-            bg_jobs[job_id].update({'status': 'error'})
+    img_bytes = generate_gift_image(obj, mood, setting)
+    if img_bytes is None:
+        return jsonify({"error": "ไม่สามารถสร้างภาพได้"}), 500
 
-    threading.Thread(target=run, daemon=True).start()
-    return jsonify({'job_id': job_id})   # ตอบทันที ไม่รอ GPU
+    img_b64 = base64.b64encode(img_bytes).decode("utf-8")
+    return jsonify({"image": f"data:image/png;base64,{img_b64}"})
 
-
-@app.route('/api/bg/status/<job_id>', methods=['GET'])
-def bg_status(job_id):
-    job = bg_jobs.get(job_id)
-    if not job:
-        return jsonify({'status': 'not_found'}), 404
-    return jsonify({'status': job['status'], 'image': job['image']})
-
-
-if __name__ == '__main__':
-    app.run(host="0.0.0.0", debug=True, port=5000, use_reloader=False)
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port, debug=False)

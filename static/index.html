@@ -1,12 +1,13 @@
 <!doctype html>
 <html lang="th">
   <head>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <meta charset="UTF-8" />
     <meta
       name="viewport"
       content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
     />
-    <title>ฝน · Rain Visual Novel</title>
+    <title>Talestalker</title>
 
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link
@@ -132,23 +133,23 @@
 
       #ep-label {
         font-family: "Noto Serif Thai", serif;
-        font-size: 0.62rem;
-        font-weight: 300;
-        letter-spacing: 0.12em;
-        color: var(--dim);
-        margin-bottom: 2px;
+        font-size: 0.78rem;
+        font-weight: 400;
+        letter-spacing: 0.1em;
+        color: rgba(232, 228, 222, 0.75);
+        margin-bottom: 4px;
       }
 
       .stat-row {
         display: flex;
         align-items: center;
-        gap: 6px;
+        gap: 8px;
       }
       .stat-lbl {
-        font-size: 0.6rem;
+        font-size: 0.72rem;
         font-weight: 700;
         letter-spacing: 0.06em;
-        min-width: 18px;
+        min-width: 20px;
       }
       .stat-lbl.ap {
         color: var(--ap);
@@ -158,8 +159,8 @@
       }
 
       .stat-track {
-        width: 72px;
-        height: 3px;
+        width: 100px;
+        height: 5px;
         border-radius: 99px;
         background: rgba(255, 255, 255, 0.12);
         overflow: hidden;
@@ -179,16 +180,16 @@
         transition: width 0.65s cubic-bezier(0.4, 0, 0.2, 1);
       }
       .stat-num {
-        font-size: 0.6rem;
-        color: var(--dim);
-        min-width: 22px;
+        font-size: 0.72rem;
+        color: rgba(232, 228, 222, 0.7);
+        min-width: 24px;
         font-variant-numeric: tabular-nums;
       }
 
       /* mood top-right */
       #mood-hud {
         position: absolute;
-        top: 12px;
+        top: 14px;
         right: 14px;
         z-index: 10;
         display: flex;
@@ -196,46 +197,195 @@
         gap: 5px;
       }
       #mood-dot {
-        width: 5px;
-        height: 5px;
+        width: 6px;
+        height: 6px;
         border-radius: 50%;
         background: #6b9fd4;
         flex-shrink: 0;
         transition: background 0.4s;
       }
       #mood-text {
-        font-size: 0.58rem;
+        font-size: 0.68rem;
         color: var(--dim);
         letter-spacing: 0.08em;
       }
-      /* view mode radio — ใต้ mood-hud */
-      #view-radio {
+
+      /* ── HUD icon buttons (camera + settings) ── */
+      #hud-icons {
         position: absolute;
-        top: 32px;
+        top: 34px;
         right: 14px;
-        z-index: 10;
+        z-index: 20;
         display: flex;
         flex-direction: column;
-        gap: 3px;
+        gap: 6px;
         align-items: flex-end;
       }
-      #view-radio label {
+      .hud-icon-btn {
+        width: 28px;
+        height: 28px;
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.07);
+        border: 1px solid rgba(107, 159, 212, 0.2);
+        color: rgba(180, 200, 230, 0.5);
+        cursor: pointer;
         display: flex;
         align-items: center;
+        justify-content: center;
+        transition: all 0.15s;
+        -webkit-tap-highlight-color: transparent;
+      }
+      .hud-icon-btn:hover,
+      .hud-icon-btn.active {
+        background: rgba(42, 82, 152, 0.45);
+        border-color: rgba(107, 159, 212, 0.45);
+        color: #c8dff5;
+      }
+      .hud-icon-btn svg {
+        width: 14px;
+        height: 14px;
+      }
+
+      /* ── HUD popup panels ── */
+      .hud-popup {
+        position: absolute;
+        right: 46px;
+        background: rgba(8, 16, 32, 0.95);
+        border: 1px solid rgba(107, 159, 212, 0.25);
+        border-radius: 10px;
+        padding: 6px;
+        display: flex;
+        flex-direction: column;
         gap: 4px;
-        cursor: pointer;
-        font-family: "Sarabun", sans-serif;
-        font-size: 0.62rem;
+        backdrop-filter: blur(16px);
+        animation: fadeIn 0.15s ease;
+        white-space: nowrap;
+        z-index: 20;
+        box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
+      }
+      .hud-popup.hidden {
+        display: none;
+      }
+
+      /* camera popup — view mode buttons */
+      #camera-popup {
+        top: 0;
+      }
+      .view-btn {
+        background: transparent;
+        border: none;
+        border-radius: 6px;
         color: rgba(180, 200, 230, 0.55);
-        user-select: none;
-        letter-spacing: 0.05em;
-      }
-      #view-radio input[type="radio"] {
-        accent-color: #c084fc;
+        font-family: "Sarabun", sans-serif;
+        font-size: 0.72rem;
+        letter-spacing: 0.04em;
+        padding: 5px 12px;
         cursor: pointer;
-        width: 10px;
-        height: 10px;
+        text-align: left;
+        transition: all 0.12s;
+        user-select: none;
       }
+      .view-btn.active,
+      .view-btn:hover {
+        background: rgba(42, 82, 152, 0.5);
+        color: #c8dff5;
+      }
+
+      /* settings popup — LLM + logout */
+      #settings-popup {
+        top: 36px;
+        min-width: 160px;
+      }
+      .settings-section-label {
+        font-size: 0.62rem;
+        letter-spacing: 0.1em;
+        color: rgba(180, 200, 230, 0.38);
+        padding: 4px 10px 2px;
+        text-transform: uppercase;
+        user-select: none;
+      }
+      .settings-divider {
+        height: 1px;
+        background: rgba(255, 255, 255, 0.07);
+        margin: 4px 0;
+      }
+      .llm-btn {
+        background: transparent;
+        border: none;
+        border-radius: 6px;
+        color: rgba(180, 200, 230, 0.55);
+        font-family: "Sarabun", sans-serif;
+        font-size: 0.76rem;
+        letter-spacing: 0.04em;
+        padding: 5px 12px;
+        cursor: pointer;
+        text-align: left;
+        transition: all 0.12s;
+        user-select: none;
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        width: 100%;
+      }
+      .llm-btn.active,
+      .llm-btn:hover {
+        background: rgba(42, 82, 152, 0.5);
+        color: #c8dff5;
+      }
+      .llm-btn .llm-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: rgba(180, 200, 230, 0.25);
+        flex-shrink: 0;
+        transition: background 0.15s;
+      }
+      .llm-btn.active .llm-dot {
+        background: #60a5fa;
+      }
+      /* LLM provider badge (ใต้ settings btn) */
+      #llm-badge {
+        font-size: 0.52rem;
+        letter-spacing: 0.08em;
+        color: rgba(180, 200, 230, 0.45);
+        text-align: center;
+        line-height: 1;
+        user-select: none;
+        transition: color 0.3s;
+      }
+      #llm-badge.typhoon {
+        color: rgba(167, 243, 208, 0.55);
+      }
+      #logout-btn {
+        background: #dc2626;
+        border: none;
+        border-radius: 6px;
+        color: #ffffff;
+        font-family: "Sarabun", sans-serif;
+        font-size: 0.78rem;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        padding: 7px 16px;
+        cursor: pointer;
+        transition: background 0.15s;
+        text-align: center;
+        width: 100%;
+      }
+      #logout-btn:hover {
+        background: #b91c1c;
+      }
+
+      /* backdrop to close popups */
+      #hud-backdrop {
+        position: fixed;
+        inset: 0;
+        z-index: 15;
+        display: none;
+      }
+      #hud-backdrop.active {
+        display: block;
+      }
+
       #mood-counter-text {
         font-size: 0.58rem;
         color: rgba(255, 255, 255, 0.28);
@@ -362,7 +512,344 @@
         letter-spacing: 0.06em;
       }
 
-      /* ══ LOADING ══ */
+      /* ── Login screen centering (portrait lock) ── */
+      #login-screen {
+        position: fixed;
+        top: 0;
+        bottom: 0;
+        left: 50%;
+        right: auto;
+        transform: translateX(-50%);
+        width: 100%;
+        max-width: 480px;
+      }
+      @media (orientation: landscape) and (max-height: 520px) {
+        #login-screen {
+          display: none !important;
+        }
+      }
+
+      /* ── Login screen design (white theme) ── */
+      .ls-inner {
+        width: 100%;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        /* subtle gradient bg — thematic, not plain white */
+        background: linear-gradient(160deg, #eef1f8 0%, #f5f0fb 100%);
+        font-family: "Sarabun", sans-serif;
+      }
+
+      /* Topbar */
+      .ls-topbar {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        padding: 16px 24px 14px;
+        background: rgba(255, 255, 255, 0.85);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        border-bottom: 1px solid rgba(226, 229, 239, 0.8);
+        flex-shrink: 0;
+      }
+      .ls-topbar .ls-dots {
+        display: grid;
+        grid-template-columns: repeat(3, 5px);
+        grid-template-rows: repeat(3, 5px);
+        gap: 2px;
+      }
+      .ls-topbar .ls-dots span {
+        width: 4px;
+        height: 4px;
+        background: #2563eb;
+        border-radius: 1px;
+        opacity: 0.7;
+      }
+      .ls-topbar .ls-brand {
+        font-family: "Noto Serif Thai", serif;
+        font-size: 15px;
+        font-weight: 400;
+        letter-spacing: 0.14em;
+        color: #0f1523;
+      }
+
+      /* Card — glassmorphism, fills remaining height */
+      .ls-card {
+        flex: 1;
+        background: rgba(255, 255, 255, 0.82);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        margin: 14px 14px 0;
+        border-radius: 20px 20px 0 0;
+        border: 1px solid rgba(255, 255, 255, 0.9);
+        border-bottom: none;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 32px 28px 32px;
+        overflow-y: auto;
+        scrollbar-width: none;
+        box-shadow:
+          0 -4px 30px rgba(30, 40, 80, 0.08),
+          inset 0 1px 0 rgba(255, 255, 255, 0.9);
+      }
+      .ls-card::-webkit-scrollbar {
+        display: none;
+      }
+
+      /* Logo — with soft ambient glow to anchor it */
+      .ls-logo-wrap {
+        display: flex;
+        justify-content: center;
+        width: 100%;
+        margin-bottom: 16px;
+        flex-shrink: 0;
+        position: relative;
+      }
+      .ls-logo-wrap::before {
+        content: "";
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 160px;
+        height: 80px;
+        background: radial-gradient(
+          ellipse,
+          rgba(139, 92, 246, 0.12) 0%,
+          transparent 70%
+        );
+        pointer-events: none;
+      }
+      .ls-logo-wrap img {
+        width: 300px;
+        height: 10;
+        display: block;
+        position: relative;
+      }
+
+      /* Heading — lighter weight, more breathing room */
+      .ls-title {
+        font-family: "Noto Serif Thai", serif;
+        font-size: 1.5rem;
+        font-weight: 400; /* ✦ ลดจาก 600 → 400 อ่านง่ายขึ้น */
+        letter-spacing: 0.04em; /* ✦ เพิ่ม spacing */
+        color: #0f1523;
+        margin-bottom: 4px;
+        text-align: center;
+      }
+      .ls-subtitle {
+        font-size: 0.85rem;
+        color: #6b7280;
+        margin-bottom: 28px;
+        text-align: center;
+        line-height: 1.5;
+      }
+
+      /* Social login group — unified radius 12px */
+      .ls-social-group {
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        margin-bottom: 24px; /* ✦ ช่องว่างชัดระหว่าง social กับ email */
+      }
+
+      /* Google — official brand style */
+      .ls-btn-google {
+        width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        padding: 12px 20px;
+        border: 1px solid #dadce0;
+        border-radius: 24px;
+        background: #ffffff;
+        font-family: "Sarabun", sans-serif;
+        font-size: 0.95rem;
+        font-weight: 500;
+        color: #3c4043;
+        cursor: pointer;
+        transition:
+          background 0.15s,
+          box-shadow 0.15s,
+          transform 0.1s;
+        box-shadow: 0 1px 3px rgba(60,64,67,0.12);
+        letter-spacing: 0.01em;
+      }
+      .ls-btn-google:hover {
+        background: #f8f9fa;
+        box-shadow: 0 2px 8px rgba(60,64,67,0.18);
+        border-color: #c6c9cc;
+      }
+      .ls-btn-google:active {
+        transform: scale(0.99);
+        background: #f1f3f4;
+      }
+
+      /* Discord — official Blurple */
+      .ls-btn-discord {
+        width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        padding: 13px 20px;
+        border: none;
+        border-radius: 12px; /* ✦ unified */
+        background: #5865f2; /* ✦ official Discord Blurple */
+        font-family: "Sarabun", sans-serif;
+        font-size: 0.95rem;
+        font-weight: 600;
+        color: #ffffff;
+        cursor: pointer;
+        transition:
+          background 0.15s,
+          box-shadow 0.15s,
+          transform 0.1s;
+        box-shadow: 0 4px 14px rgba(88, 101, 242, 0.28);
+      }
+      .ls-btn-discord:hover {
+        background: #4752c4;
+        box-shadow: 0 6px 18px rgba(88, 101, 242, 0.35);
+      }
+      .ls-btn-discord:active {
+        transform: scale(0.99);
+      }
+
+      /* Divider */
+      .ls-divider {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        width: 100%;
+        margin-bottom: 16px;
+      }
+      .ls-divider::before,
+      .ls-divider::after {
+        content: "";
+        flex: 1;
+        height: 1px;
+        background: #d1d5db;
+      }
+      .ls-divider span {
+        font-size: 0.75rem;
+        color: #9ca3af;
+        letter-spacing: 0.06em;
+      }
+
+      /* Form */
+      .ls-form-group {
+        width: 100%;
+        margin-bottom: 10px;
+      }
+      .ls-label {
+        display: block;
+        font-size: 0.8rem;
+        font-weight: 600;
+        color: #374151;
+        margin-bottom: 7px;
+      }
+      .ls-input {
+        width: 100%;
+        padding: 12px 14px;
+        background: #ffffff; /* ✦ ขาวล้วน contrast ชัดขึ้น */
+        border: 1.5px solid #c9cdd8; /* ✦ เส้นขอบเข้มขึ้น */
+        border-radius: 12px; /* ✦ unified 12px */
+        font-family: "Sarabun", sans-serif;
+        font-size: 0.92rem;
+        color: #0f1523;
+        outline: none;
+        transition:
+          border-color 0.18s,
+          box-shadow 0.18s;
+        -webkit-appearance: none;
+      }
+      .ls-input::placeholder {
+        color: #6b7280;
+      } /* ✦ เข้มขึ้นเพื่อ accessibility */
+      .ls-input:focus {
+        border-color: #2563eb;
+        box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+      }
+      .ls-input-otp {
+        text-align: center;
+        font-size: 1.3rem;
+        letter-spacing: 0.35em;
+      }
+
+      /* Email CTA — consistent verb: "เข้าสู่ระบบ" */
+      .ls-btn-primary {
+        width: 100%;
+        padding: 13px;
+        background: #ffffff;
+        color: #2563eb;
+        border: 1.5px solid #2563eb;
+        border-radius: 12px; /* ✦ unified */
+        font-family: "Sarabun", sans-serif;
+        font-size: 0.95rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition:
+          background 0.15s,
+          box-shadow 0.15s,
+          transform 0.1s;
+        letter-spacing: 0.01em;
+      }
+      .ls-btn-primary:hover {
+        background: #eff6ff;
+        box-shadow: 0 2px 10px rgba(37, 99, 235, 0.12);
+      }
+      .ls-btn-primary:active {
+        transform: scale(0.99);
+      }
+
+      .ls-otp-hint {
+        font-size: 0.8rem;
+        color: #6b7280;
+        text-align: center;
+        margin-bottom: 10px;
+      }
+
+      .ls-msg {
+        color: #ef4444;
+        font-size: 0.78rem;
+        min-height: 1rem;
+        text-align: center;
+        margin-top: 10px;
+      }
+
+      /* Footer — sticks to bottom, readable size */
+      .ls-footer {
+        background: #f5f6fa;
+        border-top: 1px solid #e2e5ef;
+        padding: 14px 24px 20px;
+        text-align: center;
+        flex-shrink: 0;
+      }
+      .ls-footer .ls-copy {
+        font-size: 0.75rem; /* ✦ bigger than before */
+        color: #9ca3af;
+        margin-bottom: 8px;
+        letter-spacing: 0.03em;
+      }
+      .ls-footer-links {
+        display: flex;
+        justify-content: center;
+        gap: 20px;
+      }
+      .ls-footer-links a {
+        font-size: 0.75rem; /* ✦ bigger than before */
+        color: #9ca3af;
+        text-decoration: none;
+        transition: color 0.15s;
+      }
+      .ls-footer-links a:hover {
+        color: #2563eb;
+      }
       #loading-overlay {
         position: fixed;
         inset: 0;
@@ -486,6 +973,364 @@
       .shake {
         animation: shake 0.38s ease;
       }
+
+      /* ══ USERNAME SCREEN ══ */
+      #username-screen {
+        display: none; /* JS จะเปิดหลัง login เท่านั้น */
+        position: fixed;
+        top: 0;
+        bottom: 0;
+        left: 50%;
+        right: auto;
+        transform: translateX(-50%);
+        width: 100%;
+        max-width: 480px;
+        z-index: 99;
+      }
+      #username-screen .ls-inner {
+        justify-content: flex-start;
+      }
+      #username-screen .ls-card {
+        justify-content: center;
+      }
+
+      .un-icon {
+        margin-bottom: 16px;
+        animation: glowPulse 3s ease-in-out infinite;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+      }
+
+      .un-icon img {
+        width: 88px;
+        height: auto;
+        display: block;
+      }
+
+      .un-title {
+        font-family: "Noto Serif Thai", serif;
+        font-size: 1.45rem;
+        font-weight: 400;
+        letter-spacing: 0.04em;
+        color: #0f1523;
+        margin-bottom: 6px;
+        text-align: center;
+      }
+
+      .un-subtitle {
+        font-size: 0.83rem;
+        color: #6b7280;
+        margin-bottom: 28px;
+        text-align: center;
+        line-height: 1.6;
+      }
+
+      #username-error {
+        font-size: 0.78rem;
+        color: #ef4444;
+        min-height: 1rem;
+        text-align: center;
+        margin-top: 8px;
+        display: none;
+      }
+
+      .un-char-counter {
+        font-size: 0.7rem;
+        color: #9ca3af;
+        text-align: right;
+        margin-top: 4px;
+        letter-spacing: 0.03em;
+      }
+      .un-char-counter.warn {
+        color: #f59e0b;
+      }
+
+      /* ── Warning chip (irreversible name) ── */
+      .un-warning-chip {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        background: #fffbeb;
+        border: 1px solid #fcd34d;
+        border-radius: 10px;
+        padding: 9px 13px;
+        margin-bottom: 20px;
+        width: 100%;
+      }
+      .un-warning-chip svg {
+        flex-shrink: 0;
+        color: #d97706;
+      }
+      .un-warning-chip span {
+        font-size: 0.78rem;
+        color: #92400e;
+        line-height: 1.4;
+      }
+
+      /* ── Disabled state for Start button ── */
+      .ls-btn-start {
+        width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        padding: 13px 20px;
+        border: none;
+        border-radius: 12px;
+        background: #2563eb;
+        font-family: "Sarabun", sans-serif;
+        font-size: 0.95rem;
+        font-weight: 600;
+        color: #ffffff;
+        cursor: pointer;
+        transition:
+          background 0.15s,
+          box-shadow 0.15s,
+          transform 0.1s;
+        box-shadow: 0 4px 14px rgba(37, 99, 235, 0.28);
+        margin-top: 8px;
+      }
+      .ls-btn-start:hover:not(:disabled) {
+        background: #1d4ed8;
+        box-shadow: 0 6px 18px rgba(37, 99, 235, 0.35);
+      }
+      .ls-btn-start:active:not(:disabled) {
+        transform: scale(0.99);
+      }
+      .ls-btn-start:disabled {
+        background: #d1d5db;
+        color: #9ca3af;
+        box-shadow: none;
+        cursor: not-allowed;
+      }
+
+      /* ── Randomize name button ── */
+      .un-input-wrap {
+        position: relative;
+        width: 100%;
+      }
+      .un-input-wrap .ls-input {
+        padding-right: 44px;
+      }
+      .un-randomize-btn {
+        position: absolute;
+        right: 10px;
+        top: 50%;
+        transform: translateY(-50%);
+        background: none;
+        border: none;
+        cursor: pointer;
+        padding: 4px;
+        color: #9ca3af;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 6px;
+        transition:
+          color 0.15s,
+          background 0.15s;
+      }
+      .un-randomize-btn:hover {
+        color: #2563eb;
+        background: #eff6ff;
+      }
+
+      /* ── Sign-up link ── */
+      .ls-signup-link {
+        text-align: center;
+        font-size: 0.8rem;
+        color: #6b7280;
+        margin-top: 12px;
+      }
+      .ls-signup-link a {
+        color: #2563eb;
+        font-weight: 600;
+        text-decoration: none;
+      }
+      .ls-signup-link a:hover {
+        text-decoration: underline;
+      }
+
+      /* ── OTP microcopy hint ── */
+      .ls-otp-entry-hint {
+        font-size: 0.75rem;
+        color: #9ca3af;
+        text-align: center;
+        margin-top: -4px;
+        margin-bottom: 4px;
+      }
+
+      /* ── Choice hint chips (gameplay) ── */
+      #hint-chips {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        padding: 8px 12px;
+        background: rgba(0, 0, 0, 0.35);
+        border-top: 1px solid rgba(255, 255, 255, 0.06);
+      }
+      #hint-chips.hidden {
+        display: none;
+      }
+      .hint-chip-label {
+        font-size: 0.6rem;
+        color: rgba(253, 230, 138, 0.6);
+        letter-spacing: 0.1em;
+        margin-bottom: 2px;
+      }
+      .hint-chips-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+      .hint-chip {
+        padding: 6px 12px;
+        border-radius: 20px;
+        background: rgba(253, 230, 138, 0.08);
+        border: 1px solid rgba(253, 230, 138, 0.25);
+        color: rgba(253, 230, 138, 0.85);
+        font-family: "Sarabun", sans-serif;
+        font-size: 0.78rem;
+        cursor: pointer;
+        transition:
+          background 0.15s,
+          border-color 0.15s;
+        -webkit-tap-highlight-color: transparent;
+        text-align: left;
+      }
+      .hint-chip:hover {
+        background: rgba(253, 230, 138, 0.18);
+        border-color: rgba(253, 230, 138, 0.5);
+      }
+      .hint-chip:active {
+        transform: scale(0.97);
+      }
+
+      /* ── Chat bubbles — messenger style ── */
+      .msg-row-fern {
+        display: flex;
+        justify-content: flex-start;
+        align-items: flex-end;
+        gap: 6px;
+        animation: slideUp 0.3s ease-out forwards;
+      }
+      .msg-row-player {
+        display: flex;
+        justify-content: flex-end;
+        align-items: flex-end;
+        gap: 6px;
+        animation: slideUp 0.3s ease-out forwards;
+      }
+
+      /* player name above bubble */
+      .player-name-tag {
+        font-size: 0.65rem;
+        font-weight: 600;
+        text-align: right;
+        margin-bottom: 2px;
+        letter-spacing: 0.04em;
+      }
+      .player-msg-wrap {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        max-width: 82%;
+      }
+      .player-bubble {
+        background: rgba(42, 82, 152, 0.55);
+        border: 1px solid rgba(107, 159, 212, 0.3);
+        border-radius: 16px 16px 4px 16px;
+        padding: 9px 13px;
+        font-size: 0.88rem;
+        line-height: 1.55;
+        color: #ddeeff;
+        word-break: break-word;
+      }
+
+      /* fern bubble */
+      .fern-name-tag {
+        display: inline-block;
+        background: rgba(192, 132, 252, 0.2);
+        border: 1px solid rgba(192, 132, 252, 0.35);
+        border-radius: 6px 6px 0 0;
+        padding: 2px 10px;
+        font-size: 0.7rem;
+        font-weight: 600;
+        color: #c084fc;
+        letter-spacing: 0.06em;
+        margin-bottom: 0;
+      }
+      .fern-bubble {
+        background: rgba(0, 0, 0, 0.55);
+        border: 1px solid rgba(192, 132, 252, 0.18);
+        border-radius: 0 12px 12px 12px;
+        padding: 10px 14px;
+        font-size: 0.88rem;
+        line-height: 1.65;
+        color: #e2eaf5;
+        word-break: break-word;
+        max-width: 100%;
+      }
+      .fern-msg-wrap {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        max-width: 85%;
+      }
+
+      /* ── AP/TP tooltip ── */
+      .stat-lbl[title] {
+        cursor: help;
+      }
+      #ap-tp-tutorial {
+        position: absolute;
+        top: 80px;
+        left: 14px;
+        z-index: 20;
+        background: rgba(5, 13, 26, 0.92);
+        border: 1px solid rgba(107, 159, 212, 0.3);
+        border-radius: 10px;
+        padding: 10px 14px;
+        max-width: 220px;
+        animation: fadeIn 0.3s ease;
+      }
+      #ap-tp-tutorial.hidden {
+        display: none;
+      }
+      .ap-tp-tut-row {
+        display: flex;
+        gap: 7px;
+        align-items: flex-start;
+        margin-bottom: 6px;
+      }
+      .ap-tp-tut-row:last-of-type {
+        margin-bottom: 10px;
+      }
+      .ap-tp-tut-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        flex-shrink: 0;
+        margin-top: 5px;
+      }
+      .ap-tp-tut-text {
+        font-size: 0.72rem;
+        color: rgba(232, 228, 222, 0.8);
+        line-height: 1.5;
+      }
+      #ap-tp-dismiss {
+        font-size: 0.7rem;
+        color: rgba(107, 159, 212, 0.7);
+        background: none;
+        border: none;
+        cursor: pointer;
+        padding: 0;
+        font-family: "Sarabun", sans-serif;
+        display: block;
+        width: 100%;
+        text-align: right;
+      }
     </style>
   </head>
 
@@ -525,6 +1370,218 @@
       </p>
     </div>
 
+    <!-- Login Screen -->
+    <div id="login-screen" style="z-index: 100">
+      <div class="ls-inner">
+        <!-- Top bar -->
+        <div class="ls-topbar">
+          <span class="ls-brand">Talestalker</span>
+        </div>
+
+        <!-- Body -->
+        <div class="ls-card">
+          <!-- Logo -->
+          <div class="ls-logo-wrap">
+            <img src="/static/logo.png" alt="Logo" />
+          </div>
+
+          <h1 class="ls-title">ยินดีต้อนรับกลับมา</h1>
+          <p class="ls-subtitle">เข้าสู่ระบบเพื่อบันทึกความก้าวหน้า</p>
+
+          <!-- Social login group -->
+          <div class="ls-social-group">
+            <!-- Google Login -->
+            <button id="google-btn" class="ls-btn-google">
+              <svg width="18" height="18" viewBox="0 0 48 48" fill="none">
+                <path d="M47.53 24.56c0-1.64-.15-3.22-.42-4.74H24v8.97h13.21c-.57 3.07-2.3 5.67-4.9 7.41v6.15h7.93c4.64-4.28 7.29-10.59 7.29-17.79z" fill="#4285F4"/>
+                <path d="M24 48c6.64 0 12.21-2.2 16.28-5.96l-7.93-6.15c-2.2 1.48-5.01 2.35-8.35 2.35-6.42 0-11.85-4.34-13.79-10.17H1.96v6.35C5.99 42.66 14.39 48 24 48z" fill="#34A853"/>
+                <path d="M10.21 28.07A14.98 14.98 0 0 1 9.27 24c0-1.41.24-2.78.65-4.07v-6.35H1.96A23.96 23.96 0 0 0 0 24c0 3.86.93 7.51 2.56 10.72l7.65-6.65z" fill="#FBBC04"/>
+                <path d="M24 9.75c3.61 0 6.86 1.24 9.41 3.68l7.06-7.06C36.2 2.42 30.64 0 24 0 14.39 0 5.99 5.34 1.96 13.28l8.25 6.65C12.15 14.09 17.58 9.75 24 9.75z" fill="#EA4335"/>
+              </svg>
+              ดำเนินการต่อด้วย Google
+            </button>
+
+            <!-- Discord Login -->
+            <button id="discord-btn" class="ls-btn-discord">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="#ffffff">
+                <path
+                  d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"
+                />
+              </svg>
+              เข้าสู่ระบบด้วย Discord
+            </button>
+          </div>
+
+          <!-- Divider -->
+          <div class="ls-divider"><span>หรือ</span></div>
+
+          <!-- Email step -->
+          <div
+            id="email-step"
+            style="
+              width: 100%;
+              display: flex;
+              flex-direction: column;
+              gap: 12px;
+            "
+          >
+            <div class="ls-form-group">
+              <label class="ls-label" for="email-input">อีเมล</label>
+              <input
+                id="email-input"
+                type="email"
+                class="ls-input"
+                placeholder="your.email@example.com"
+              />
+            </div>
+            <button id="otp-send-btn" class="ls-btn-primary">
+              เข้าสู่ระบบด้วยอีเมล
+            </button>
+            <p class="ls-otp-entry-hint">
+              เราจะส่งรหัส OTP 6 หลักไปยังอีเมลของคุณ
+            </p>
+          </div>
+
+          <!-- OTP step -->
+          <div
+            id="otp-step"
+            style="
+              width: 100%;
+              display: none;
+              flex-direction: column;
+              gap: 12px;
+            "
+          >
+            <p class="ls-otp-hint">กรอกรหัส 6 หลักที่ส่งไปที่อีเมล</p>
+            <div class="ls-form-group">
+              <label class="ls-label" for="otp-input">รหัส OTP</label>
+              <input
+                id="otp-input"
+                type="text"
+                maxlength="6"
+                placeholder="000000"
+                class="ls-input ls-input-otp"
+              />
+            </div>
+            <button id="otp-verify-btn" class="ls-btn-primary">
+              ยืนยัน OTP
+            </button>
+          </div>
+
+          <p id="login-msg" class="ls-msg"></p>
+          <p class="ls-signup-link">
+            ยังไม่มีบัญชีใช่ไหม?
+            <a href="#" id="signup-hint-link">เริ่มต้นได้เลย</a>
+          </p>
+        </div>
+        <!-- /ls-card -->
+
+        <!-- Footer -->
+        <div class="ls-footer">
+          <p class="ls-copy">©Jab Mon</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Username Screen — แสดงหลัง login เท่านั้น (JS controlled) -->
+    <div id="username-screen">
+      <div class="ls-inner">
+        <!-- Top bar -->
+        <div class="ls-topbar">
+          <span class="ls-brand">Talestalker</span>
+        </div>
+
+        <!-- Card -->
+        <div class="ls-card">
+          <div class="ls-logo-wrap">
+            <img src="/static/logo.png" alt="Logo" />
+          </div>
+
+          <h1 class="un-title">ตั้งชื่อตัวละคร</h1>
+          <p class="un-subtitle">เฟิร์นจะเรียกคุณด้วยชื่อนี้ตลอดการเดินทาง</p>
+
+          <div class="un-warning-chip">
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+              style="color: #d97706"
+            >
+              <path d="M8 6v3M8 11.5v.5" stroke-linecap="round" />
+              <path
+                d="M6.8 2.5l-5.3 9.2A1.4 1.4 0 002.7 14h10.6a1.4 1.4 0 001.2-2.1L9.2 2.5a1.4 1.4 0 00-2.4 0z"
+                stroke-linejoin="round"
+              />
+            </svg>
+            <span
+              >ชื่อนี้ไม่สามารถเปลี่ยนได้ภายหลัง
+              กรุณาตรวจสอบให้แน่ใจก่อนกด</span
+            >
+          </div>
+
+          <div class="ls-form-group">
+            <label class="ls-label" for="username-input">ชื่อของคุณ</label>
+            <div class="un-input-wrap">
+              <input
+                id="username-input"
+                type="text"
+                class="ls-input"
+                placeholder="ใส่ชื่อที่ต้องการ"
+                maxlength="20"
+                autocomplete="off"
+                autocorrect="off"
+                spellcheck="false"
+              />
+              <button
+                class="un-randomize-btn"
+                id="randomize-btn"
+                type="button"
+                title="สุ่มชื่อ"
+              >
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <path
+                    d="M2 18h1.4c1.3 0 2.5-.6 3.3-1.7l6.1-8.6c.8-1.1 2-1.7 3.3-1.7H22"
+                  />
+                  <path d="m18 2 4 4-4 4" />
+                  <path d="M2 6h1.9c1.5 0 2.9.9 3.5 2.2" />
+                  <path d="M22 18h-5.9c-1.3 0-2.5-.7-3.1-1.8l-.5-.8" />
+                  <path d="m18 14 4 4-4 4" />
+                </svg>
+              </button>
+            </div>
+            <div class="un-char-counter">
+              <span id="un-char-count">0</span> / 20
+            </div>
+          </div>
+
+          <p id="username-error"></p>
+
+          <button id="username-confirm-btn" class="ls-btn-start" disabled>
+            เริ่มการเดินทาง
+          </button>
+        </div>
+        <!-- /ls-card -->
+
+        <!-- Footer -->
+        <div class="ls-footer">
+          <p class="ls-copy">©Jab Mon</p>
+        </div>
+      </div>
+    </div>
+    <!-- /username-screen -->
+
     <!-- Game Root -->
     <div id="game-root" style="opacity: 0">
       <!-- BG -->
@@ -532,6 +1589,25 @@
 
       <!-- Live2D -->
       <div id="live2d-wrapper"></div>
+
+      <!-- AP/TP first-time tutorial -->
+      <div id="ap-tp-tutorial" class="hidden">
+        <div class="ap-tp-tut-row">
+          <div class="ap-tp-tut-dot" style="background: #f9a8d4"></div>
+          <div class="ap-tp-tut-text">
+            <strong style="color: #f9a8d4">AP</strong> — Action Points
+            คะแนนความกระตือรือร้นในการสนทนา
+          </div>
+        </div>
+        <div class="ap-tp-tut-row">
+          <div class="ap-tp-tut-dot" style="background: #93c5fd"></div>
+          <div class="ap-tp-tut-text">
+            <strong style="color: #93c5fd">TP</strong> — Trust Points
+            ความไว้วางใจที่เฟิร์นมีต่อคุณ
+          </div>
+        </div>
+        <button id="ap-tp-dismiss">เข้าใจแล้ว ✕</button>
+      </div>
 
       <!-- TOP HUD left (EP / AP / TP) -->
       <div id="top-hud">
@@ -555,21 +1631,77 @@
         <span id="mood-counter-text"></span>
       </div>
 
-      <!-- VIEW MODE radio -->
-      <div id="view-radio">
-        <label
-          ><input type="radio" name="view-mode" value="fullbody" checked />
-          Full</label
-        >
-        <label><input type="radio" name="view-mode" value="half" /> Half</label>
-        <label
-          ><input type="radio" name="view-mode" value="closeup" />
-          Close-up</label
-        >
+      <!-- HUD backdrop (closes popups) -->
+      <div id="hud-backdrop"></div>
+
+      <!-- HUD icon buttons: camera + settings -->
+      <div id="hud-icons">
+        <!-- Camera / view mode -->
+        <button class="hud-icon-btn" id="camera-btn" title="มุมมอง">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path
+              d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"
+            />
+            <circle cx="12" cy="13" r="4" />
+          </svg>
+        </button>
+        <!-- Camera popup -->
+        <div id="camera-popup" class="hud-popup hidden">
+          <button class="view-btn active" data-mode="fullbody">
+            Full Body
+          </button>
+          <button class="view-btn" data-mode="half">Half</button>
+          <button class="view-btn" data-mode="closeup">Close-up</button>
+        </div>
+
+        <!-- Settings -->
+        <button class="hud-icon-btn" id="settings-btn" title="ตั้งค่า">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <circle cx="12" cy="12" r="3" />
+            <path
+              d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"
+            />
+          </svg>
+        </button>
+        <!-- LLM badge -->
+        <div id="llm-badge">Gemini</div>
+
+        <!-- Settings popup -->
+        <div id="settings-popup" class="hud-popup hidden">
+          <div class="settings-section-label">AI Model</div>
+          <button class="llm-btn active" data-llm="gemini">
+            <span class="llm-dot"></span>Gemini
+          </button>
+          <button class="llm-btn" data-llm="typhoon">
+            <span class="llm-dot"></span>Typhoon
+          </button>
+          <div class="settings-divider"></div>
+          <button id="logout-btn">Logout</button>
+        </div>
       </div>
 
       <!-- BOTTOM PANEL -->
       <div id="bottom-panel">
+        <!-- hint chips (shown before input) -->
+        <div id="hint-chips" class="hidden">
+          <div class="hint-chip-label">💡 ตัวเลือก</div>
+          <div class="hint-chips-row" id="hint-chips-row"></div>
+        </div>
+
         <!-- chat log -->
         <div id="chat-log">
           <div
