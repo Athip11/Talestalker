@@ -24,7 +24,7 @@ PROVIDERS = ('gemini', 'typhoon')
 
 # ── Gemini LLM (LangChain) ─────────────────────────────────────────────
 _gemini_llm  = ChatGoogleGenerativeAI(
-    model       = "gemini-2.5-flash-image",
+    model       = "gemini-2.5-flash",
     api_key     = os.getenv("GEMINI_API_KEY"),
     temperature = 0.8,
 )
