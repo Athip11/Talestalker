@@ -2,7 +2,16 @@
 # game/character.py — Fern AI Character Engine
 # ════════════════════════════════════════════════
 
-import json, re, time, os
+import json, re, time, os, sys, logging
+
+# ── Suppress LangChain internal logging (root cause of UnicodeEncodeError) ──
+# LangChain callbacks try to print Thai prompts/responses → ASCII stdout → crash
+logging.getLogger("langchain").setLevel(logging.CRITICAL)
+logging.getLogger("langchain_core").setLevel(logging.CRITICAL)
+logging.getLogger("langchain_google_genai").setLevel(logging.CRITICAL)
+logging.getLogger("langchain_community").setLevel(logging.CRITICAL)
+logging.getLogger("google").setLevel(logging.CRITICAL)
+
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.prompts import ChatPromptTemplate
 from openai import OpenAI
@@ -15,6 +24,21 @@ _novita_client = NovitaClient(os.getenv("NOVITA_API_KEY"))
 
 load_dotenv()
 
+
+# ── Safe print helper (Railway stdout is ASCII — never let Thai reach it raw) ──
+def _log(msg: str) -> None:
+    """Print to stdout safely — encodes Thai chars as ? instead of crashing."""
+    try:
+        safe = msg.encode("utf-8").decode("utf-8")
+        sys.stdout.buffer.write((safe + "\n").encode("utf-8", errors="replace"))
+        sys.stdout.buffer.flush()
+    except Exception:
+        try:
+            print(msg.encode("ascii", errors="replace").decode("ascii"))
+        except Exception:
+            pass
+
+
 # ── Constants ──────────────────────────────────────────────────────────
 VALID_MOODS   = {'exasperated', 'neutral', 'happy', 'touched', 'sad'}
 RUDE_KEYWORDS = ['มึง', 'กู', 'ไอ้', 'อี', 'สัตว์',
@@ -22,11 +46,12 @@ RUDE_KEYWORDS = ['มึง', 'กู', 'ไอ้', 'อี', 'สัตว์'
 
 PROVIDERS = ('gemini', 'typhoon')
 
-# ── Gemini LLM (LangChain) ─────────────────────────────────────────────
+# ── Gemini LLM (LangChain) — verbose=False prevents callback logging ──
 _gemini_llm  = ChatGoogleGenerativeAI(
     model       = "gemini-2.5-flash-image",
     api_key     = os.getenv("GEMINI_API_KEY"),
     temperature = 0.8,
+    verbose     = False,          # ← KEY FIX: disables internal callback prints
 )
 _gemini_json = _gemini_llm.bind(response_mime_type="application/json")
 
@@ -305,10 +330,10 @@ def call_fern(player_input: str, ep: dict, ap: int, tp: int,
             result = _parse_raw(raw)
             if result is None:
                 if attempt == 0:
-                    print(f'  [WARN] Parse error round 1 [{provider}] - retrying...')
+                    _log(f'  [WARN] Parse error round 1 [{provider}] - retrying...')
                     time.sleep(1)
                     continue
-                print(f'  [WARN] Parse error round 2 [{provider}] - using default')
+                _log(f'  [WARN] Parse error round 2 [{provider}] - using default')
                 return {'reaction': '...', 'ap_change': 0,
                         'tp_change': 0, 'reason': 'parse error', 'mood': 'neutral'}
 
@@ -320,12 +345,15 @@ def call_fern(player_input: str, ep: dict, ap: int, tp: int,
             return enforce_rules(result, player_input, ap)
 
         except Exception as e:
+            err_ascii = str(e).encode("ascii", errors="replace").decode("ascii")
             if attempt == 0:
-                print(f'  [WARN] API error round 1 [{provider}] - retrying... ({str(e).encode("ascii","replace")[:60]})')
+                _log(f'  [WARN] API error round 1 [{provider}] - retrying... ({err_ascii[:80]})')
                 time.sleep(1)
                 continue
+            _log(f'  [WARN] API error round 2 [{provider}]: {err_ascii}')
+            # ไม่เอา str(e) ดิบๆ ไปใส่ reaction — อาจมี Thai/Unicode ทำให้ crash ซ้ำ
             return {
-                'reaction' : f'[Error: {str(e)[:60]}]',
+                'reaction' : 'ขอโทษค่ะ ระบบขัดข้องชั่วคราว',
                 'ap_change': 0, 'tp_change': 0,
                 'reason'   : 'api error', 'mood': 'neutral',
             }
@@ -363,11 +391,12 @@ def summarize_ep(turns: list[dict], ep_data: dict,
             }
 
         except Exception as e:
+            err_ascii = str(e).encode("ascii", errors="replace").decode("ascii")
             if attempt == 0:
-                print(f'  [WARN] summarize_ep error [{provider}] round 1 - retrying... ({str(e).encode("ascii","replace")[:60]})')
+                _log(f'  [WARN] summarize_ep error [{provider}] round 1 - retrying... ({err_ascii[:60]})')
                 time.sleep(1)
                 continue
-            print(f'  [WARN] summarize_ep failed [{provider}]: {str(e).encode("ascii","replace")}')
+            _log(f'  [WARN] summarize_ep failed [{provider}]: {err_ascii}')
             return {"summary": "ไม่สามารถสรุปได้",
                     "key_moments": [], "fern_feeling": "ไม่มีข้อมูล"}
 
@@ -389,15 +418,16 @@ def _translate_to_english(text: str) -> str:
             model       = "gemini-2.5-flash",
             api_key     = os.getenv("GEMINI_API_KEY"),
             temperature = 0,
+            verbose     = False,          # ← suppress callback logging
         )
         res = llm.invoke(
             f"Translate to English, reply with only the translated phrase, no explanation: {text}"
         )
         result = res.content if hasattr(res, 'content') else str(res)
-        print(f"[translate] '{text.encode('ascii','replace')}' -> '{result.strip().encode('ascii','replace')}'")
+        _log(f"[translate] -> '{result.strip()}'")
         return result.strip()
     except Exception as e:
-        print(f"[translate] error: {str(e).encode('ascii','replace')}")
+        _log(f"[translate] error: {str(e).encode('ascii','replace').decode('ascii')}")
         return text
 
 def _make_holdable(obj_en: str) -> str:
@@ -410,6 +440,7 @@ def _make_holdable(obj_en: str) -> str:
             model       = "gemini-2.5-flash",
             api_key     = os.getenv("GEMINI_API_KEY"),
             temperature = 0,
+            verbose     = False,          # ← suppress callback logging
         )
         prompt = (
             f"You are helping write a Stable Diffusion prompt for an anime girl holding an object.\n"
@@ -430,10 +461,10 @@ def _make_holdable(obj_en: str) -> str:
         )
         res    = llm.invoke(prompt)
         result = (res.content if hasattr(res, 'content') else str(res)).strip()
-        print(f"[holdable] '{obj_en}' -> '{result}'")
+        _log(f"[holdable] '{obj_en}' -> '{result}'")
         return result if result else obj_en
     except Exception as e:
-        print(f"[holdable] error: {str(e).encode('ascii','replace')} - fallback to original")
+        _log(f"[holdable] error: {str(e).encode('ascii','replace').decode('ascii')} - fallback to original")
         return obj_en
 
 
@@ -449,10 +480,9 @@ def generate_gift_image(gift_object: str, mood: str, setting: str) -> bytes | No
     # แปลภาษาไทย → อังกฤษ แล้วแปลงให้ถือได้
     gift_en      = _translate_to_english(gift_object)
     gift_prompt  = _make_holdable(gift_en)
-    print(f"[gift] '{gift_object.encode('ascii','replace')}' -> '{gift_en}' -> '{gift_prompt}'")
+    _log(f"[gift] -> '{gift_en}' -> '{gift_prompt}'")
 
     prompt_text = (
-        # ✅ ย้าย holding มาต้น prompt ให้ token weight สูง + เพิ่ม emphasis (:1.4)
         f"1girl, fern (frieren), solo, (holding {gift_prompt} with both hands:1.4), "
         f"masterpiece, best quality, ultra-detailed official anime artwork, "
         f"detailed purple eyes, half-closed eyes, {mood_prompt}, purple hair, low twintails, "
@@ -467,7 +497,6 @@ def generate_gift_image(gift_object: str, mood: str, setting: str) -> bytes | No
         "high twintails, high ponytail, short hair, belt, belts, straps, "
         "large eyes, wide eyes, angry, shouting, smiling, happy, energetic, "
         "excessive magical aura, dynamic angle, action pose, "
-        # ✅ บังคับมือต้องถืออะไรเสมอ
         "empty hands, hands behind back, arms crossed, hands in pocket, hands at side"
     )
 
@@ -488,7 +517,7 @@ def generate_gift_image(gift_object: str, mood: str, setting: str) -> bytes | No
         img.save(buf, format="PNG")
         return buf.getvalue()
     except Exception as e:
-        print(f"[gift] generate error: {str(e).encode('ascii','replace')}")
+        _log(f"[gift] generate error: {str(e).encode('ascii','replace').decode('ascii')}")
         return None
 
 
@@ -509,7 +538,7 @@ def generate_bg_image(prompt: str) -> bytes | None:
         "ugly, blurry, low quality, watermark, text, logo, nsfw, "
         "worst quality, lowres, jpeg artifacts"
     )
-    print(f"[BG] generating... prompt='{prompt[:60]}'")
+    _log(f"[BG] generating... prompt='{prompt[:60]}'")
     t0 = time.time()
     try:
         res = _novita_client.txt2img_v3(
@@ -526,8 +555,8 @@ def generate_bg_image(prompt: str) -> bytes | None:
         img = base64_to_image(res.images_encoded[0])
         buf = io.BytesIO()
         img.save(buf, format="PNG")
-        print(f"[BG] done ({time.time()-t0:.1f}s) - prompt='{prompt[:60]}'")
+        _log(f"[BG] done ({time.time()-t0:.1f}s)")
         return buf.getvalue()
     except Exception as e:
-        print(f"[BG] error ({time.time()-t0:.1f}s): {str(e).encode('ascii','replace')}")
+        _log(f"[BG] error ({time.time()-t0:.1f}s): {str(e).encode('ascii','replace').decode('ascii')}")
         return None
