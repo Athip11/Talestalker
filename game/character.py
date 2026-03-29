@@ -4,13 +4,26 @@
 
 import json, re, time, os, sys, logging
 
-# ── Suppress LangChain internal logging (root cause of UnicodeEncodeError) ──
-# LangChain callbacks try to print Thai prompts/responses → ASCII stdout → crash
-logging.getLogger("langchain").setLevel(logging.CRITICAL)
-logging.getLogger("langchain_core").setLevel(logging.CRITICAL)
-logging.getLogger("langchain_google_genai").setLevel(logging.CRITICAL)
-logging.getLogger("langchain_community").setLevel(logging.CRITICAL)
-logging.getLogger("google").setLevel(logging.CRITICAL)
+# ── Force root logging handler to use UTF-8 so ANY logger that slips through
+#    never hits ASCII stdout directly ──────────────────────────────────────────
+for _h in logging.root.handlers:
+    if hasattr(_h, "stream") and hasattr(_h.stream, "reconfigure"):
+        try:
+            _h.stream.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+
+# ── Suppress all library loggers that may try to print Thai text to ASCII stdout
+#    LangChain, OpenAI client (httpx), Google SDK, Novita ─────────────────────
+for _logger_name in (
+    "langchain", "langchain_core", "langchain_google_genai", "langchain_community",
+    "google", "google.generativeai",
+    "openai", "openai._base_client",
+    "httpx", "httpcore", "httpcore.http11", "httpcore.connection",
+    "urllib3", "urllib3.connectionpool",
+    "novita_client",
+):
+    logging.getLogger(_logger_name).setLevel(logging.CRITICAL)
 
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.prompts import ChatPromptTemplate
@@ -262,6 +275,36 @@ def _summarize_gemini(turns_text: str, ep_data: dict) -> str:
 
 
 # ══════════════════════════════════════════════════════════════════════
+#  STDOUT GUARD — ครอบ httpx/OpenAI ที่ดื้อที่สุด
+# ══════════════════════════════════════════════════════════════════════
+
+import contextlib
+import io as _io
+
+@contextlib.contextmanager
+def _utf8_stdout():
+    """
+    Context manager: ชั่วคราวแทนที่ sys.stdout ด้วย wrapper ที่ยอมรับ Unicode
+    ป้องกัน httpx / openai ที่ยังดื้อ print ลง stdout ตรงๆ
+    """
+    _orig = sys.stdout
+    try:
+        # TextIOWrapper ที่เขียนลง buffer เดิม แต่ encode ด้วย utf-8
+        if hasattr(_orig, "buffer"):
+            sys.stdout = _io.TextIOWrapper(
+                _orig.buffer, encoding="utf-8", errors="replace", line_buffering=True
+            )
+        yield
+    finally:
+        # flush แล้วคืน stdout เดิม
+        try:
+            sys.stdout.flush()
+        except Exception:
+            pass
+        sys.stdout = _orig
+
+
+# ══════════════════════════════════════════════════════════════════════
 #  TYPHOON CALLS
 # ══════════════════════════════════════════════════════════════════════
 
@@ -276,15 +319,16 @@ def _call_fern_typhoon(player_input: str, ep: dict, ap: int, tp: int,
         tp      = tp,
         memory  = memory_trimmed,
     )
-    response = _typhoon_client.chat.completions.create(
-        model       = TYPHOON_MODEL,
-        messages    = [
-            {"role": "system", "content": system},
-            {"role": "user",   "content": player_input},
-        ],
-        max_tokens  = 4096,
-        temperature = 0.8,
-    )
+    with _utf8_stdout():
+        response = _typhoon_client.chat.completions.create(
+            model       = TYPHOON_MODEL,
+            messages    = [
+                {"role": "system", "content": system},
+                {"role": "user",   "content": player_input},
+            ],
+            max_tokens  = 4096,
+            temperature = 0.8,
+        )
     return response.choices[0].message.content or ""
 
 
@@ -294,15 +338,16 @@ def _summarize_typhoon(turns_text: str, ep_data: dict) -> str:
         f"Setting: {ep_data.get('setting', '')}\n\n"
         f"บทสนทนา:\n{turns_text}"
     )
-    response = _typhoon_client.chat.completions.create(
-        model       = TYPHOON_MODEL,
-        messages    = [
-            {"role": "system", "content": SUMMARY_SYSTEM},
-            {"role": "user",   "content": user_msg},
-        ],
-        max_tokens  = 4096,
-        temperature = 0.5,
-    )
+    with _utf8_stdout():
+        response = _typhoon_client.chat.completions.create(
+            model       = TYPHOON_MODEL,
+            messages    = [
+                {"role": "system", "content": SUMMARY_SYSTEM},
+                {"role": "user",   "content": user_msg},
+            ],
+            max_tokens  = 4096,
+            temperature = 0.5,
+        )
     return response.choices[0].message.content or ""
 
 
