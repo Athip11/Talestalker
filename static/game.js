@@ -14,9 +14,10 @@ const SUPABASE_ANON_KEY = "sb_publishable_TIv965QLMmOiYfA71UUarg_vMacvbxx"; // �
 
 const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-let _accessToken = null;
-let _username = null;
+let _accessToken = null; // เก็บ JWT ปัจจุบัน
+let _username = null; // เก็บ username ของผู้เล่น (โหลดจาก /api/profile)
 
+/* ── Login UI helpers ── */
 function showLoginMsg(msg, color = "#f87171") {
   document.getElementById("login-msg").style.color = color;
   document.getElementById("login-msg").textContent = msg;
@@ -101,9 +102,10 @@ document
   });
 
 /* ── Session restore (Google redirect / existing session) ── */
-let _booted = false;
+let _booted = false; // กันไม่ให้ boot() ถูกเรียกซ้ำ
 
 async function initAuth() {
+  // ซ่อน loading overlay ระหว่างรอเช็ค session — จะแสดงใหม่ใน bootWithData
   document.getElementById("loading-overlay").classList.add("hidden");
 
   const {
@@ -116,8 +118,10 @@ async function initAuth() {
     hideLoginScreen();
     checkProfile();
   }
+  // ถ้าไม่มี session → login screen แสดงอยู่แล้วโดย default
 }
 
+// Refresh token อัตโนมัติ (ไม่ boot ซ้ำ)
 _supabase.auth.onAuthStateChange((event, session) => {
   if (session) _accessToken = session.access_token;
 });
@@ -153,10 +157,14 @@ const CONFIG = {
    GAME STATE
 ══════════════════════════════════════════ */
 const state = {
-  episode: null, // รับจาก /api/start — ใช้ detect EP transition
-  mood: "neutral", // รับจาก /api/talk — ใช้ส่งให้ showEnding()
-  busy: false, // UI lock guard
-  live2dModel: null, // Pixi Live2D model ref
+  ap: 20,
+  tp: 20,
+  episode: "EP1",
+  episodeLabel: "EP 1 · ฝนตกครั้งแรก",
+  mood: "neutral",
+  moodCounter: 0,
+  busy: false,
+  live2dModel: null,
 };
 
 /* ══════════════════════════════════════════
@@ -283,11 +291,9 @@ async function apiTalk(text) {
       "Content-Type": "application/json",
       Authorization: `Bearer ${_accessToken}`,
     },
-    body: JSON.stringify({ text }),
+    body: JSON.stringify({ text, username: _username || "ผู้เล่น" }),
   });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || `server error ${res.status}`);
-  return data;
+  return res.json();
 }
 
 async function apiGetProfile() {
@@ -348,10 +354,12 @@ function setLlmProvider(provider) {
 ══════════════════════════════════════════ */
 function updateStats({ ap, tp, mood, moodCounter, episodeLabel }) {
   if (ap !== undefined) {
+    state.ap = ap;
     DOM.apBar.style.width = `${Math.min(100, (ap / CONFIG.AP_MAX) * 100)}%`;
     DOM.apVal.textContent = ap;
   }
   if (tp !== undefined) {
+    state.tp = tp;
     DOM.tpBar.style.width = `${Math.min(100, (tp / CONFIG.TP_MAX) * 100)}%`;
     DOM.tpVal.textContent = tp;
   }
@@ -370,6 +378,7 @@ function updateStats({ ap, tp, mood, moodCounter, episodeLabel }) {
     DOM.moodText.style.color = color;
   }
   if (moodCounter !== undefined) {
+    state.moodCounter = moodCounter;
     DOM.moodCounter.textContent = ""; // ซ่อน score
   }
   if (episodeLabel !== undefined) {
@@ -491,14 +500,43 @@ function escHtml(s) {
 /* ══════════════════════════════════════════
    ENDING SCREEN
 ══════════════════════════════════════════ */
-// title + text มาจาก server (config.py) — เก็บแค่ emoji + color ที่ server ไม่ส่งมา
 const ENDING_DATA = {
-  warm_a: { emoji: "❤️", color: "#fda4af" },
-  warm_b: { emoji: "💛", color: "#fde68a" },
-  warm_c: { emoji: "🌱", color: "#86efac" },
-  cold_a: { emoji: "🌤️", color: "#7dd3fc" },
-  cold_b: { emoji: "🌧️", color: "#93c5fd" },
-  cold_c: { emoji: "💔", color: "#f87171" },
+  warm_a: {
+    emoji: "❤️",
+    title: "ฝนหยุดแล้ว",
+    color: "#fda4af",
+    desc: "เธอหยุดรอ และเธอรู้ว่าใครบางคนจะอยู่ตรงนั้นเสมอ",
+  },
+  warm_b: {
+    emoji: "💛",
+    title: "ใต้ร่มคันเดียวกัน",
+    color: "#fde68a",
+    desc: "ไม่ต้องพูดอะไรมาก แค่เดินไปด้วยกัน",
+  },
+  warm_c: {
+    emoji: "🌱",
+    title: "เพื่อนที่ดีที่สุด",
+    color: "#86efac",
+    desc: "บางความสัมพันธ์ไม่ต้องการคำนิยาม",
+  },
+  cold_a: {
+    emoji: "🌤️",
+    title: "รอยยิ้มสุดท้าย",
+    color: "#7dd3fc",
+    desc: "เธอยิ้มให้ครั้งสุดท้ายก่อนจะหันหลังเดินไป",
+  },
+  cold_b: {
+    emoji: "🌧️",
+    title: "ฝนที่ไม่หยุด",
+    color: "#93c5fd",
+    desc: "บางครั้งฝนก็ตกโดยไม่มีสัญญาณว่าจะหยุด",
+  },
+  cold_c: {
+    emoji: "💔",
+    title: "ใจสลาย",
+    color: "#f87171",
+    desc: "มีบางอย่างที่หักไปแล้วจะซ่อมไม่ได้",
+  },
 };
 
 function showEnding(
@@ -510,11 +548,13 @@ function showEnding(
 ) {
   const data = ENDING_DATA[endingKey] || {
     emoji: "🌸",
+    title: endingKey,
     color: "#c8dff5",
+    desc: "จบแล้ว",
   };
 
-  const displayTitle = endingTitle || endingKey;
-  const storyHtml = (endingText || "").replace(/\n/g, "<br>");
+  const displayTitle = endingTitle || data.title;
+  const storyHtml = endingText ? endingText.replace(/\n/g, "<br>") : data.desc;
   const playerName = _username || "ผู้เล่น";
 
   const overlay = document.createElement("div");
@@ -548,7 +588,7 @@ function showEnding(
       <p style="font-family:'Sarabun',sans-serif;font-size:0.88rem;
                 color:rgba(200,223,245,0.85);text-align:center;line-height:1.7;margin:0">
         <span style="color:${data.color};font-weight:600">${escHtmlSimple(playerName)}</span>
-        อยากให้ของขวัญอะไรกับเฟิร์นไหม?
+        จะให้ของขวัญอะไรกับเฟิร์นก่อนลาจากกันไหม?
       </p>
       <div style="display:flex;gap:0.5rem;width:100%">
         <input id="gift-input" type="text" maxlength="50"
@@ -729,7 +769,7 @@ async function handleSend() {
 
     if (res.ap_change < -4 || res.tp_change < -4) shakeScreen();
 
-    await addMessage("fern", res.reaction || "...", res.mood, true);
+    await addMessage("fern", res.reaction, res.mood, true);
 
     const apSign = res.ap_change >= 0 ? `+${res.ap_change}` : res.ap_change;
     const tpSign = res.tp_change >= 0 ? `+${res.tp_change}` : res.tp_change;
@@ -814,10 +854,11 @@ function applyBgImage(dataUrl) {
 }
 
 async function loadBackground(prompt) {
-  if (!prompt || prompt === currentBgPrompt) return;
+  if (!prompt) return;
+
   currentBgPrompt = prompt;
 
-  applyBgGradient(prompt); // แสดง gradient ทันทีก่อนรอ GPU
+  applyBgGradient(prompt);
   setStatus("กำลังโหลดฉาก...");
 
   try {
@@ -825,9 +866,12 @@ async function loadBackground(prompt) {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${_accessToken}`,
+        Authorization: `Bearer ${_accessToken}`, // 🔴 เพิ่มบรรทัดนี้เข้าไปครับ!
       },
-      body: JSON.stringify({ prompt }),
+      body: JSON.stringify({
+        prompt: prompt,
+        _timestamp: Date.now(),
+      }),
     });
 
     if (!res.ok) {
@@ -839,9 +883,9 @@ async function loadBackground(prompt) {
     const data = await res.json();
     if (data.image) {
       applyBgImage(data.image);
-      console.log("[BG] Loaded");
+      console.log("[BG] ✅ โหลดภาพสำเร็จ");
     } else {
-      console.warn("[BG] No image in response");
+      console.warn("[BG] ไม่ได้รับ image จาก server");
     }
     setStatus("พิมพ์ข้อความถึงเฟิร์น");
   } catch (err) {
@@ -861,6 +905,8 @@ DOM.input.addEventListener("keydown", (e) => {
     handleSend();
   }
 });
+
+// NOTE: DOM.input "input" event wired in showHintChips section below
 
 /* ══════════════════════════════════════════
    VIEW MODE — fullbody / half / closeup
@@ -972,11 +1018,15 @@ document.getElementById("logout-btn").addEventListener("click", logout);
    USERNAME SCREEN
 ══════════════════════════════════════════ */
 
+/**
+ * checkProfile() — เรียกหลัง login สำเร็จเสมอ
+ * ถ้ามี username อยู่แล้ว → boot() เลย
+ * ถ้าไม่มี            → แสดง #username-screen ก่อน
+ */
 async function checkProfile() {
   try {
     const data = await apiGetProfile();
-    const isRealUsername = data.username && !data.username.startsWith("_tmp_");
-    if (isRealUsername) {
+    if (data.username) {
       _username = data.username;
       document.getElementById("loading-overlay").classList.remove("hidden");
       boot();
@@ -1004,106 +1054,31 @@ function showUsernameScreen() {
 
   // Random Thai-flavored names pool
   const RANDOM_NAMES = [
-    "สกาย",
-    "ออกัส",
-    "พรีม",
-    "น้ำขิง",
-    "ข้าวปั้น",
-    "เจเจ",
-    "โบนัส",
-    "ปอร์เช่",
-    "ต้นน้ำ",
-    "ภูผา",
-    "มิวสิค",
-    "วิน",
-    "นะโม",
-    "มายด์",
-    "พีท",
-    "ออโต้",
-    "ใยไหม",
-    "แพรว",
-    "มาร์ค",
-    "นิวเยียร์",
-    "เต็นท์",
-    "ตะวัน",
-    "ซี",
-    "มิวนิค",
-    "นานา",
+    "ดาวพระศุกร์",
+    "มณีแดง",
+    "ลมฝน",
+    "หิมะ",
+    "ทิพย์",
+    "ดาว",
+    "จันทร์",
+    "ฟ้า",
+    "น้ำฝน",
+    "พลอย",
+    "ปาน",
+    "มิ้น",
     "ไอซ์",
-    "อิงค์",
-    "พิม",
-    "เนย",
-    "แจม",
-    "โอม",
-    "นนท์",
-    "ริว",
-    "บลู",
-    "มินนี่",
-    "ลูกพีช",
-    "ครีม",
-    "เค้ก",
-    "กีต้าร์",
-    "เบล",
-    "แบงค์",
-    "บอส",
-    "เจมส์",
-    "กาย",
-    "ไทม์",
-    "ฟิวส์",
-    "ดิว",
-    "นิว",
-    "เต",
-    "ปอนด์",
-    "เอิร์ท",
-    "มิกซ์",
-    "ปลื้ม",
-    "แบมแบม",
-    "น้ำฟ้า",
-    "แพรวา",
-    "ใบตอง",
-    "ใบเตย",
-    "น้ำหวาน",
-    "ต้นหอม",
-    "ข้าวหอม",
-    "ข้าวฟ่าง",
-    "จีจี้",
-    "เนเน่",
-    "พีพี",
-    "ฟรังก์",
-    "ปันปัน",
-    "ติวเตอร์",
-    "โฟกัส",
-    "อาร์ต",
-    "เกมส์",
-    "กัปตัน",
-    "ไนซ์",
-    "ฟร้อนท์",
-    "เบสท์",
+    "มาย",
+    "นุ้ย",
+    "บิ๊ก",
+    "เนม",
+    "ไมค์",
+    "โบ",
+    "แพร",
+    "แก้ว",
+    "กุ้ง",
+    "ปู",
     "บีม",
-    "ป๊อป",
-    "มุก",
-    "หมิว",
-    "มิ้ว",
-    "เฟิร์น",
-    "แฟร์",
-    "ฟิล์ม",
-    "เกรซ",
-    "พลอยใส",
-    "พิมพิม",
-    "ขนุน",
-    "ฟ้าใส",
-    "ภู",
-    "กราฟ",
-    "เคน",
-    "คิน",
-    "เจแปน",
-    "ไตเติ้ล",
-    "ตังตัง",
-    "นาวา",
-    "บาส",
-    "ปาล์ม",
-    "พอร์ช",
-    "อลิส",
+    "เอิ้น",
   ];
 
   // Disabled state — enable only when input >= 2 chars
@@ -1245,6 +1220,7 @@ async function handleUsernameConfirm(username) {
    BOOT SEQUENCE
 ══════════════════════════════════════════ */
 async function boot() {
+  // Guard: ถ้าไม่มี token หยุดทันที
   if (!_accessToken) {
     console.warn("boot() called without token — aborting");
     return;
@@ -1277,8 +1253,8 @@ async function bootWithData(startData) {
   if (startData.llm_provider) setLlmProvider(startData.llm_provider);
 
   updateStats({
-    ap: startData.ap,
-    tp: startData.tp,
+    ap: startData.ap ?? 20,
+    tp: startData.tp ?? 20,
     mood: "neutral",
     moodCounter: 0,
     episodeLabel: startData.episode_label ?? "EP 1",
@@ -1370,6 +1346,7 @@ const signupLink = document.getElementById("signup-hint-link");
 if (signupLink) {
   signupLink.addEventListener("click", (e) => {
     e.preventDefault();
+    // เปลี่ยน title และ subtitle ให้รู้สึกเหมือน register flow
     const titleEl = document.querySelector(".ls-title");
     const subtitleEl = document.querySelector(".ls-subtitle");
     if (titleEl) titleEl.textContent = "สร้างบัญชีใหม่";
@@ -1392,3 +1369,4 @@ if (signupLink) {
    KICK OFF
 ══════════════════════════════════════════ */
 window.addEventListener("DOMContentLoaded", initAuth);
+// boot() จะถูกเรียกจาก initAuth เมื่อ login สำเร็จ

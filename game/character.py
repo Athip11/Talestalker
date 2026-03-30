@@ -2,7 +2,7 @@
 #game/character.py - Fern AI Character Engine
 
 
-import json, re, time, os, sys, logging
+import json, re, time, os, sys, logging, random
 
 for _h in logging.root.handlers:
     if hasattr(_h, "stream") and hasattr(_h.stream, "reconfigure"):
@@ -590,14 +590,17 @@ def generate_gift_image(gift_object: str, mood: str, setting: str) -> bytes | No
 
 #  BACKGROUND IMAGE GENERATION (Novita AI)
 
-
 def generate_bg_image(prompt: str) -> bytes | None:
+    # 1. สุ่มตัวเลขขึ้นมาเพื่อใช้เป็น Seed
+    random_seed = random.randint(1, 2147483647) 
+
     full_prompt = (
         f"anime visual novel background, {prompt}, "
         f"no characters, no people, no humans, empty scene, "
         f"masterpiece, best quality, ultra-detailed, "
         f"2d anime style, painterly, soft lighting, atmospheric depth, "
-        f"vibrant colors, cinematic composition"
+        f"vibrant colors, cinematic composition, "
+        f"variation_{random_seed}" # 2. แอบเติมค่าสุ่มลงไปท้าย Prompt เพื่อหลอก Cache
     )
     negative_prompt = (
         "people, characters, person, human, girl, boy, figure, silhouette, "
@@ -617,6 +620,7 @@ def generate_bg_image(prompt: str) -> bytes | None:
             steps           = 25,
             guidance_scale  = 7.5,
             sampler_name    = Samplers.DPMPP_M_KARRAS,
+            seed            = random_seed, # 3. ใส่พารามิเตอร์ seed ให้กับ Novita API
         )
         img = base64_to_image(res.images_encoded[0])
         buf = io.BytesIO()
