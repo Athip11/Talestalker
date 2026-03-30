@@ -16,9 +16,8 @@ DEFAULT_LLM = "gemini"
 VALID_LLMS  = {"gemini", "typhoon"}
 
 
-# ══════════════════════════════════════════
-#  AUTH
-# ══════════════════════════════════════════
+
+#AUTH
 
 def get_current_user(token: str) -> dict | None:
     try:
@@ -47,9 +46,7 @@ def require_auth(f):
     return decorated
 
 
-# ══════════════════════════════════════════
 #  PROFILES (username + llm_provider)
-# ══════════════════════════════════════════
 
 def get_username(user_id: str) -> str | None:
     """คืน username หรือ None ถ้ายังไม่ตั้ง"""
@@ -59,13 +56,10 @@ def get_username(user_id: str) -> str | None:
             .eq("user_id", user_id) \
             .maybe_single() \
             .execute()
-            
-        # แก้ไข: เช็คว่า res ไม่ใช่ None และมีข้อมูล ก่อนเรียกใช้งาน
         if res and hasattr(res, 'data') and res.data:
             return res.data.get("username")
         return None
     except Exception as e:
-        # แก้ไข: เอา print ออกเพื่อแก้บั๊ก I/O operation on closed file
         pass
         return None
 
@@ -100,7 +94,6 @@ def get_llm_setting(user_id: str) -> str:
                 
         return DEFAULT_LLM
     except Exception as e:
-        # แก้ไข: เอา print ออกเพื่อแก้บั๊ก I/O operation on closed file
         pass
         return DEFAULT_LLM
 
@@ -116,9 +109,6 @@ def save_llm_setting(user_id: str, provider: str) -> bool:
             .eq("user_id", user_id) \
             .execute()
 
-        # ถ้า UPDATE ไม่กระทบ row ใดเลย (row ยังไม่มี) ให้ upsert สร้าง row ใหม่
-        # ใช้ placeholder username = "_tmp_<8 ตัวแรกของ user_id>"
-        # (user จะเปลี่ยน username จริงผ่าน POST /api/profile ทีหลัง)
         updated_count = len(res.data) if res and res.data else 0
         if updated_count == 0:
             placeholder = f"_tmp_{user_id[:8]}"
@@ -133,9 +123,9 @@ def save_llm_setting(user_id: str, provider: str) -> bool:
         return False
 
 
-# ══════════════════════════════════════════
-#  GAME STATE
-# ══════════════════════════════════════════
+
+#GAME STATE
+
 
 def load_game_state(user_id: str) -> dict | None:
     try:
@@ -162,12 +152,16 @@ def save_game_state(user_id: str, state_obj) -> None:
         "game_over":    state_obj.game_over,
         "updated_at":   "now()",
     }
-    supabase.table("game_states").upsert(data, on_conflict="user_id").execute()
+    # FIX: ครอบ try/except — ถ้า Supabase หลุดกลางเกม
+    # จะไม่ crash ทั้งระบบ แค่ log warning แล้วเล่นต่อได้
+    try:
+        supabase.table("game_states").upsert(data, on_conflict="user_id").execute()
+    except Exception as e:
+        print(f"save_game_state error (state not persisted): {e}")
 
 
-# ══════════════════════════════════════════
-#  CHAT HISTORY — raw turns
-# ══════════════════════════════════════════
+
+#CHAT HISTORY — raw turns
 
 def save_turn(user_id: str, episode: str,
               player: str, fern: str, mood: str) -> None:
@@ -212,9 +206,8 @@ def delete_turns(user_id: str, episode: str) -> None:
         print(f"delete_turns error: {e}")
 
 
-# ══════════════════════════════════════════
-#  CHAT HISTORY — EP summaries
-# ══════════════════════════════════════════
+
+#CHAT HISTORY — EP summaries
 
 def save_summary(user_id: str, episode: str,
                  summary: str, key_moments: list, fern_feeling: str) -> None:

@@ -1,11 +1,9 @@
-# ════════════════════════════════════════════════
-# game/character.py — Fern AI Character Engine
-# ════════════════════════════════════════════════
+
+#game/character.py - Fern AI Character Engine
+
 
 import json, re, time, os, sys, logging
 
-# ── Force root logging handler to use UTF-8 so ANY logger that slips through
-#    never hits ASCII stdout directly ──────────────────────────────────────────
 for _h in logging.root.handlers:
     if hasattr(_h, "stream") and hasattr(_h.stream, "reconfigure"):
         try:
@@ -13,8 +11,6 @@ for _h in logging.root.handlers:
         except Exception:
             pass
 
-# ── Suppress all library loggers that may try to print Thai text to ASCII stdout
-#    LangChain, OpenAI client (httpx), Google SDK, Novita ─────────────────────
 for _logger_name in (
     "langchain", "langchain_core", "langchain_google_genai", "langchain_community",
     "google", "google.generativeai",
@@ -38,9 +34,8 @@ _novita_client = NovitaClient(os.getenv("NOVITA_API_KEY"))
 load_dotenv()
 
 
-# ── Safe print helper (Railway stdout is ASCII — never let Thai reach it raw) ──
 def _log(msg: str) -> None:
-    """Print to stdout safely — encodes Thai chars as ? instead of crashing."""
+    """Print to stdout safely - encodes Thai chars as ? instead of crashing."""
     try:
         safe = msg.encode("utf-8").decode("utf-8")
         sys.stdout.buffer.write((safe + "\n").encode("utf-8", errors="replace"))
@@ -52,14 +47,13 @@ def _log(msg: str) -> None:
             pass
 
 
-# ── Constants ──────────────────────────────────────────────────────────
 VALID_MOODS   = {'exasperated', 'neutral', 'happy', 'touched', 'sad'}
 RUDE_KEYWORDS = ['มึง', 'กู', 'ไอ้', 'อี', 'สัตว์',
                  'ควาย', 'บ้า', 'โง่', 'ขยะ', 'เพี้ยน', 'แม่ง']
 
 PROVIDERS = ('gemini', 'typhoon')
 
-# ── Gemini LLM (LangChain) — verbose=False prevents callback logging ──
+# ── Gemini LLM (LangChain) - verbose=False prevents callback logging ──
 _gemini_llm  = ChatGoogleGenerativeAI(
     model       = "gemini-2.5-flash",
     api_key     = os.getenv("GEMINI_API_KEY"),
@@ -75,9 +69,7 @@ _typhoon_client = OpenAI(
 )
 TYPHOON_MODEL = "typhoon-v2.5-30b-a3b-instruct"
 
-# ══════════════════════════════════════════════════════════════════════
 #  PROMPT TEMPLATES
-# ══════════════════════════════════════════════════════════════════════
 
 # ── Fern System Prompt (shared) ────────────────────────────────────────
 FERN_SYSTEM = """\
@@ -95,7 +87,7 @@ You are Fern, a 17-year-old human mage. You are a highly competent, pragmatic pr
 # CURRENT STATE:
 - Setting: {setting}
 - Context: {context}
-- Relationship → AP: {ap}/100 | TP: {tp}/100 
+- Relationship -> AP: {ap}/100 | TP: {tp}/100 
   (AP = Affinity/Feeling | TP = Trust/Reliability)
 
 # MEMORY FROM PAST EPISODES:
@@ -109,9 +101,9 @@ You are Fern, a 17-year-old human mage. You are a highly competent, pragmatic pr
    - Polite/Responsible: AP/TP > 0 (Mood: calm, slightly warm)
    - Offering Sweets/Deep Care: AP/TP >> 0 (Mood: touched, awkward)
 4. Constraints: If AP < 30, you keep a physical distance and are highly formal, but you will still ensure the player doesn't get hurt (because you are responsible).
-5. If MEMORY contains past events, reference them naturally when relevant — do NOT ignore them.
+5. If MEMORY contains past events, reference them naturally when relevant - do NOT ignore them.
 
-# FORMAT — ตอบเป็น JSON เท่านั้น ห้ามมีข้อความอื่น:
+# FORMAT - ตอบเป็น JSON เท่านั้น ห้ามมีข้อความอื่น:
 {{
   "reaction": "คำพูดของเฟิร์น (ภาษาไทย)",
   "ap_change": <integer -10 ถึง 10>,
@@ -132,7 +124,7 @@ SUMMARY_SYSTEM = """\
 }\
 """
 
-# ── LangChain chains (Gemini only) ────────────────────────────────────
+#LangChain chains (Gemini only)
 _fern_lc_prompt = ChatPromptTemplate.from_messages([
     ('system', FERN_SYSTEM.replace('{', '{{').replace('}', '}}')
                .replace('{{setting}}', '{setting}')
@@ -151,9 +143,7 @@ _summary_lc_prompt = ChatPromptTemplate.from_messages([
 _summary_chain = _summary_lc_prompt | _gemini_json
 
 
-# ══════════════════════════════════════════════════════════════════════
-#  JSON UTILITIES
-# ══════════════════════════════════════════════════════════════════════
+#JSON UTILITIES
 
 def extract_json_fallback(raw: str) -> dict | None:
     try:
@@ -196,9 +186,9 @@ def _parse_raw(raw: str) -> dict | None:
         return extract_json_fallback(raw)
 
 
-# ══════════════════════════════════════════════════════════════════════
-#  RULE ENFORCER
-# ══════════════════════════════════════════════════════════════════════
+
+#RULE ENFORCER
+
 
 def enforce_rules(result: dict, player_input: str, ap: int) -> dict:
     if any(kw in player_input for kw in RUDE_KEYWORDS):
@@ -216,9 +206,9 @@ def enforce_rules(result: dict, player_input: str, ap: int) -> dict:
     return result
 
 
-# ══════════════════════════════════════════════════════════════════════
-#  MEMORY BUILDER
-# ══════════════════════════════════════════════════════════════════════
+
+#MEMORY BUILDER
+
 
 def build_memory(summaries: list[dict]) -> str:
     if not summaries:
@@ -238,9 +228,9 @@ def build_memory(summaries: list[dict]) -> str:
     return "\n".join(lines)
 
 
-# ══════════════════════════════════════════════════════════════════════
-#  GEMINI CALLS
-# ══════════════════════════════════════════════════════════════════════
+
+#GEMINI CALLS
+
 
 def _call_fern_gemini(player_input: str, ep: dict, ap: int, tp: int,
                       memory: str) -> str:
@@ -274,9 +264,6 @@ def _summarize_gemini(turns_text: str, ep_data: dict) -> str:
     return str(response.content)
 
 
-# ══════════════════════════════════════════════════════════════════════
-#  STDOUT GUARD — ครอบ httpx/OpenAI ที่ดื้อที่สุด
-# ══════════════════════════════════════════════════════════════════════
 
 import contextlib
 import io as _io
@@ -284,15 +271,15 @@ import io as _io
 @contextlib.contextmanager
 def _utf8_stdout():
     """
-    No-op context manager — การแทนที่ sys.stdout ทำให้พังบน Windows
+    No-op context manager - การแทนที่ sys.stdout ทำให้พังบน Windows
     เก็บไว้เพื่อไม่ให้ต้องแก้ call site
     """
     yield
 
 
-# ══════════════════════════════════════════════════════════════════════
-#  TYPHOON CALLS
-# ══════════════════════════════════════════════════════════════════════
+
+#TYPHOON CALLS
+
 
 def _call_fern_typhoon(player_input: str, ep: dict, ap: int, tp: int,
                        memory: str) -> str:
@@ -337,19 +324,36 @@ def _summarize_typhoon(turns_text: str, ep_data: dict) -> str:
     return response.choices[0].message.content or ""
 
 
-# ══════════════════════════════════════════════════════════════════════
-#  PUBLIC API
-# ══════════════════════════════════════════════════════════════════════
+
+#PUBLIC API
+
 
 def call_fern(player_input: str, ep: dict, ap: int, tp: int,
               summaries: list[dict] | None = None,
-              provider: str = 'gemini') -> dict:
+              provider: str = 'gemini',
+              current_hit=None) -> dict:
     """
     เรียก Fern AI แล้วคืน dict:
       reaction, ap_change, tp_change, reason, mood
     provider: 'gemini' | 'typhoon'
+    current_hit: story directive (str หรือ dict) จาก EPISODE_HITS (optional)
     """
     memory = build_memory(summaries or [])
+
+    # ── inject story directive เข้า player_input ถ้ามี current_hit ──
+    if current_hit:
+        # รองรับทั้ง string และ dict
+        hit_desc = current_hit if isinstance(current_hit, str) else current_hit.get('desc', str(current_hit))
+        directive = (
+            f"\n\n[STORY DIRECTOR] ในเทิร์นนี้ คุณต้องพาเรื่องไปสู่ milestone ต่อไปนี้:\n"
+            f"- {hit_desc}\n"
+            f"- ถ้าผู้เล่นพูดไม่เกี่ยวกับ milestone นี้ ให้นำเสนอมันอย่างเป็นธรรมชาติ\n"
+            f"- อย่าพูดตรงๆ ว่า 'ถึงเวลาทำ milestone' แต่ redirect เรื่องกลับมา"
+        )
+        if provider == 'typhoon':
+            player_input = player_input + directive
+        else:
+            player_input = directive + "\n\n" + player_input
 
     for attempt in range(2):
         try:
@@ -382,7 +386,7 @@ def call_fern(player_input: str, ep: dict, ap: int, tp: int,
                 time.sleep(1)
                 continue
             _log(f'  [WARN] API error round 2 [{provider}]: {err_ascii}')
-            # ไม่เอา str(e) ดิบๆ ไปใส่ reaction — อาจมี Thai/Unicode ทำให้ crash ซ้ำ
+            # ไม่เอา str(e) ดิบๆ ไปใส่ reaction - อาจมี Thai/Unicode ทำให้ crash ซ้ำ
             return {
                 'reaction' : 'ขอโทษค่ะ ระบบขัดข้องชั่วคราว',
                 'ap_change': 0, 'tp_change': 0,
@@ -393,7 +397,7 @@ def call_fern(player_input: str, ep: dict, ap: int, tp: int,
 def summarize_ep(turns: list[dict], ep_data: dict,
                  provider: str = 'gemini') -> dict:
     """
-    สรุป EP ที่จบแล้ว → คืน summary, key_moments, fern_feeling
+    สรุป EP ที่จบแล้ว -> คืน summary, key_moments, fern_feeling
     provider: 'gemini' | 'typhoon'
     """
     if not turns:
@@ -414,7 +418,17 @@ def summarize_ep(turns: list[dict], ep_data: dict,
             else:
                 raw = _summarize_gemini(turns_text, ep_data)
 
-            result = json.loads(raw.strip())
+            result = _parse_raw(raw.strip())
+            # FIX: ใช้ _parse_raw แทน json.loads ตรงๆ
+            # ให้ consistent กับ call_fern และมี regex fallback เหมือนกัน
+            if result is None:
+                if attempt == 0:
+                    _log(f'  [WARN] summarize_ep parse error [{provider}] round 1 - retrying...')
+                    time.sleep(1)
+                    continue
+                _log(f'  [WARN] summarize_ep parse failed [{provider}] - using default')
+                return {"summary": "ไม่สามารถสรุปได้",
+                        "key_moments": [], "fern_feeling": "ไม่มีข้อมูล"}
             return {
                 "summary"     : result.get("summary", ""),
                 "key_moments" : result.get("key_moments", []),
@@ -431,9 +445,7 @@ def summarize_ep(turns: list[dict], ep_data: dict,
             return {"summary": "ไม่สามารถสรุปได้",
                     "key_moments": [], "fern_feeling": "ไม่มีข้อมูล"}
 
-# ══════════════════════════════════════════════════════════════════════
-#  GIFT IMAGE GENERATION (Imagen 3)
-# ══════════════════════════════════════════════════════════════════════
+#GIFT IMAGE GENERATION
 
 MOOD_THAI = {
     'happy'       : 'ยิ้มแย้มรื่นเริง',
@@ -443,57 +455,78 @@ MOOD_THAI = {
     'sad'         : 'เศร้าเล็กน้อย',
 }
 
+def _typhoon_text(system: str, user: str, max_tokens: int = 120) -> str:
+    """Helper - เรียก Typhoon แบบ single-turn แล้วคืน text ดิบ"""
+    with _utf8_stdout():
+        resp = _typhoon_client.chat.completions.create(
+            model       = TYPHOON_MODEL,
+            messages    = [
+                {"role": "system", "content": system},
+                {"role": "user",   "content": user},
+            ],
+            max_tokens  = max_tokens,
+            temperature = 0.2,   # ต่ำ - ต้องการคำตอบแน่นอน ไม่สร้างสรรค์
+        )
+    return (resp.choices[0].message.content or "").strip()
+
+
 def _translate_to_english(text: str) -> str:
+    """แปลภาษาไทย (หรือภาษาอื่น) ไป อังกฤษ ผ่าน Typhoon"""
     try:
-        llm = ChatGoogleGenerativeAI(
-            model       = "gemini-2.5-flash",
-            api_key     = os.getenv("GEMINI_API_KEY"),
-            temperature = 0,
-            verbose     = False,          # ← suppress callback logging
+        result = _typhoon_text(
+            system = (
+                "You are a translator. Translate the user's input to English. "
+                "Reply with ONLY the translated phrase - no explanation, no punctuation at the end."
+            ),
+            user = text,
         )
-        res = llm.invoke(
-            f"Translate to English, reply with only the translated phrase, no explanation: {text}"
-        )
-        result = res.content if hasattr(res, 'content') else str(res)
-        _log(f"[translate] -> '{result.strip()}'")
-        return result.strip()
+        _log(f"[translate] '{text}' -> '{result}'")
+        return result if result else text
     except Exception as e:
         _log(f"[translate] error: {str(e).encode('ascii','replace').decode('ascii')}")
         return text
 
+
 def _make_holdable(obj_en: str) -> str:
     """
-    ใช้ Gemini คิดว่าควรปรับ object ยังไงให้ตัวละครถือได้ใน anime illustration
-    fallback กลับ obj_en เดิมถ้า Gemini ล้มเหลว
+    ให้ Typhoon แปลง object ให้เป็น Stable Diffusion prompt
+    ที่ทำให้ตัวละครถือของได้จริง - คืน phrase สั้น SD-friendly
+    Fallback กลับ obj_en เดิมถ้า Typhoon ล้มเหลว
     """
     try:
-        llm = ChatGoogleGenerativeAI(
-            model       = "gemini-2.5-flash",
-            api_key     = os.getenv("GEMINI_API_KEY"),
-            temperature = 0,
-            verbose     = False,          # ← suppress callback logging
+        result = _typhoon_text(
+            max_tokens = 500,
+            system = (
+                "You write Stable Diffusion prompts. Your task is to convert an object name "
+                "into a SHORT phrase (max 8 words) that makes an anime girl visibly hold it.\n\n"
+                "CRITICAL RULES - follow exactly:\n"
+                "- Output ONLY the final phrase. No explanation. No quotes. No punctuation.\n"
+                "- The phrase must start with a concrete noun the model can draw.\n"
+                "- Holdable as-is (food, book, weapon, tool, small item) -> return as-is.\n"
+                "- Living animal -> 'cute [animal] plushie'\n"
+                "- Plant / tree -> 'small potted [plant]'\n"
+                "- Flowers -> 'small bouquet of [flower]'\n"
+                "- Large object (vehicle, building, furniture) -> 'chibi miniature [object] toy'\n"
+                "- Abstract / intangible (love, hope, time) -> 'glowing [concept] crystal orb'\n"
+                "- Food / drink -> keep name, add 'on a small plate' only if needed for clarity.\n"
+                "- Never output a sentence. Never output 'holding'. Output the OBJECT PHRASE only."
+            ),
+            user = obj_en,
         )
-        prompt = (
-            f"You are helping write a Stable Diffusion prompt for an anime girl holding an object.\n"
-            f"The object is: \"{obj_en}\"\n\n"
-            f"Your task: rewrite the object into a SHORT phrase (max 8 words) that:\n"
-            f"1. Can physically be held by a person with both hands\n"
-            f"2. Works well in anime illustration style\n"
-            f"3. Preserves the spirit/identity of the original object\n\n"
-            f"Rules:\n"
-            f"- If it's already holdable (e.g. 'apple', 'book', 'sword') → return it as-is\n"
-            f"- If it's too large (vehicle, building, etc.) → make it a 'small chibi miniature toy [object]'\n"
-            f"- If it's a living animal → make it a 'cute [animal] plushie'\n"
-            f"- If it's a plant/tree → make it 'small potted [plant]'\n"
-            f"- If it's flowers → make it 'small bouquet of [flowers]'\n"
-            f"- If it's abstract/impossible → make it a glowing orb, crystal, or charm that represents it\n"
-            f"- If it has an impossible color (e.g. blue sunflower) → keep the color, just wrap it appropriately\n\n"
-            f"Reply with ONLY the final phrase, no explanation, no quotes."
+        result = result.strip().strip('"').strip("'").strip()
+        JUNK_STARTS = ("i ", "this ", "you ", "here ", "the object", "to convert",
+                       "i will", "i would", "i'll", "please", "sure", "of course")
+        is_junk = (
+            not result
+            or len(result.split()) > 12
+            or result.lower().startswith(JUNK_STARTS)
+            or result.endswith(".")
         )
-        res    = llm.invoke(prompt)
-        result = (res.content if hasattr(res, 'content') else str(res)).strip()
+        if is_junk:
+            _log(f"[holdable] junk detected '{result}' - fallback to '{obj_en}'")
+            return obj_en
         _log(f"[holdable] '{obj_en}' -> '{result}'")
-        return result if result else obj_en
+        return result
     except Exception as e:
         _log(f"[holdable] error: {str(e).encode('ascii','replace').decode('ascii')} - fallback to original")
         return obj_en
@@ -508,29 +541,31 @@ def generate_gift_image(gift_object: str, mood: str, setting: str) -> bytes | No
         'sad'         : 'expressionless, melancholic eyes',
     }.get(mood, 'expressionless, deadpan face')
 
-    # แปลภาษาไทย → อังกฤษ แล้วแปลงให้ถือได้
-    gift_en      = _translate_to_english(gift_object)
-    gift_prompt  = _make_holdable(gift_en)
-    _log(f"[gift] -> '{gift_en}' -> '{gift_prompt}'")
+    # แปลภาษาไทย -> อังกฤษ แล้วแปลงให้ถือได้
+    gift_en     = _translate_to_english(gift_object)
+    gift_prompt = _make_holdable(gift_en)
+    _log(f"[gift] '{gift_object}' -> '{gift_en}' -> '{gift_prompt}'")
 
     prompt_text = (
-        f"1girl, fern (frieren), solo, (holding {gift_prompt} with both hands:1.4), "
+        f"1girl, fern (frieren), solo, "
+        f"({gift_prompt}:1.3), (holding {gift_prompt} with both hands:1.5), "
         f"masterpiece, best quality, ultra-detailed official anime artwork, "
-        f"detailed purple eyes, half-closed eyes, {mood_prompt}, purple hair, low twintails, "
+        f"detailed purple eyes, half-closed eyes, {mood_prompt}, "
+        f"purple hair, long hair, straight hair, hair down, blunt bangs, "
         f"wearing her signature loose plain black overcoat over white dress with lace collar, "
         f"hands raised in front of chest, looking directly at viewer, detailed hands, correct fingers, "
         f"background: {setting}, soft rim lighting, sharp focus, 2d style, hand-drawn anime, absurdres"
     )
+    _log(f"[gift] FULL PROMPT: {prompt_text}")
 
     negative_prompt = (
         "nsfw, lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, "
         "cropped, worst quality, low quality, jpeg artifacts, watermark, blurry, 3d model style, "
-        "high twintails, high ponytail, short hair, belt, belts, straps, "
+        "twintails, low twintails, high twintails, ponytail, high ponytail, short hair, hair tie, belt, belts, straps, " # เพิ่มคำสั่งกันการมัดผม/ทวินเทล
         "large eyes, wide eyes, angry, shouting, smiling, happy, energetic, "
         "excessive magical aura, dynamic angle, action pose, "
-        "empty hands, hands behind back, arms crossed, hands in pocket, hands at side"
+        "empty hands, hands behind back, arms crossed, hands in pocket, hands at side, extra hands, multiple hands" # เพิ่ม extra hands กันมือผีหลอก
     )
-
     try:
         res = _novita_client.txt2img_v3(
             model_name      = "animagineXLV31_v31.safetensors",
@@ -552,9 +587,9 @@ def generate_gift_image(gift_object: str, mood: str, setting: str) -> bytes | No
         return None
 
 
-# ══════════════════════════════════════════════════════════════════════
+
 #  BACKGROUND IMAGE GENERATION (Novita AI)
-# ══════════════════════════════════════════════════════════════════════
+
 
 def generate_bg_image(prompt: str) -> bytes | None:
     full_prompt = (

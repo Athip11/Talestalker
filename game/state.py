@@ -1,12 +1,7 @@
-from game.config import EPISODES, get_ending
+from game.config import EPISODES, get_ending, EPISODE_HITS
 from game.character import call_fern, summarize_ep
 
 MOOD_SCORE = {'happy': 1, 'touched': 2, 'neutral': 0, 'exasperated': -1, 'sad': -1}
-
-ENDING_KEY_MAP = {
-    ('WARM', 0): 'warm_a', ('WARM', 1): 'warm_b', ('WARM', 2): 'warm_c',
-    ('COLD', 0): 'cold_a', ('COLD', 1): 'cold_b', ('COLD', 2): 'cold_c',
-}
 
 
 class GameState:
@@ -19,11 +14,8 @@ class GameState:
         self.route         = None
         self.game_over     = False
 
-        # user_id สำหรับ DB operations (set โดย get_or_create_state)
         self.user_id       = None
-        # summaries ของ EP ที่ผ่านมา (โหลดตอน init จาก DB)
         self.summaries     = []
-        # LLM provider ที่เลือก: 'gemini' | 'typhoon'
         self.llm_provider  = 'gemini'
 
     def current_ep(self):
@@ -58,10 +50,10 @@ class GameState:
     def _resolve_ending(self):
         from game.config import ENDINGS
         route  = self.route or 'COLD'
-        pool   = ENDINGS[route]
         ending = get_ending(route, self.ap, self.tp)
-        idx    = pool.index(ending)
-        key    = ENDING_KEY_MAP.get((route, idx), 'cold_c')
+        # FIX: ดึง key จาก ending dict โดยตรง (config.py มี 'key' field แล้ว)
+        # ไม่ต้องพึ่ง ENDING_KEY_MAP ที่ขึ้นกับ list index
+        key = ending.get('key', 'cold_c')
         return {'ending_data': ending, 'ending_key': key}
 
     def _finish_ep(self, ep_id: str) -> None:
@@ -73,7 +65,6 @@ class GameState:
         turns = get_turns(self.user_id, ep_id)
         if turns:
             ep_data = EPISODES[ep_id]['data']
-            # ส่ง provider เดิมที่ใช้ใน EP นี้เข้าไปสรุปด้วย
             result  = summarize_ep(turns, ep_data, provider=self.llm_provider)
             save_summary(
                 self.user_id, ep_id,
@@ -96,12 +87,15 @@ class GameState:
         ep_id   = self.current_ep_id
         ep_data = self.current_ep()
 
-        # ── เรียก Fern พร้อม inject memory และ provider ──
+        ep_hits = EPISODE_HITS.get(ep_id, [])
+        current_hit = ep_hits[self.turn] if self.turn < len(ep_hits) else None
+
         fern_result = call_fern(
             player_input, ep_data,
             self.ap, self.tp,
             summaries=self.summaries,
             provider=self.llm_provider,
+            current_hit=current_hit,
         )
 
         self.ap += fern_result['ap_change']
@@ -112,7 +106,6 @@ class GameState:
         self.mood_counter += MOOD_SCORE.get(mood, 0)
         self.turn += 1
 
-        # ── บันทึก raw turn ลง DB ──
         if self.user_id:
             from game.auth import save_turn
             save_turn(
@@ -184,5 +177,3 @@ class GameState:
             'new_ep_hint'     : new_ep_hint,
             'llm_provider'    : self.llm_provider,
         }
-
-

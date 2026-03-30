@@ -1,5 +1,5 @@
 import sys
-# ── Force UTF-8 stdout FIRST — before any other import that might print Thai ──
+# ── Force UTF-8 stdout FIRST - before any other import that might print Thai ──
 # Railway's default stdout encoding is ASCII → UnicodeEncodeError on Thai chars
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -37,10 +37,10 @@ def get_or_create_state(user_id: str) -> GameState:
         # โหลด summaries ทุก EP ที่ผ่านมา → inject memory
         gs.summaries = get_summaries(user_id)
 
-        # โหลด LLM preference จาก DB
+        #โหลดLLM preferenceจาก DB
         gs.llm_provider = get_llm_setting(user_id)
 
-        # โหลด game state จาก DB
+        #โหลดgame stateจาก DB
         saved = load_game_state(user_id)
         if saved and not saved["game_over"]:
             gs.ap            = saved["ap"]
@@ -54,9 +54,9 @@ def get_or_create_state(user_id: str) -> GameState:
     return sessions[user_id]
 
 
-# ══════════════════════════════════════════════════════════════════════
-#  PROFILE — username
-# ══════════════════════════════════════════════════════════════════════
+
+#  PROFILE - username
+
 
 @app.route("/api/profile", methods=["GET"])
 @require_auth
@@ -80,9 +80,9 @@ def api_set_profile():
     return jsonify({"username": username})
 
 
-# ══════════════════════════════════════════════════════════════════════
-#  SETTINGS — LLM provider
-# ══════════════════════════════════════════════════════════════════════
+
+#  SETTINGS - LLM provider
+
 
 @app.route("/api/settings", methods=["GET"])
 @require_auth
@@ -95,7 +95,7 @@ def api_get_settings():
 @app.route("/api/settings", methods=["POST"])
 @require_auth
 def api_set_settings():
-    """อัปเดต settings — รองรับ llm_provider: 'gemini' | 'typhoon'"""
+    """อัปเดต settings - รองรับ llm_provider: 'gemini' | 'typhoon'"""
     body     = request.json or {}
     provider = body.get("llm_provider", "").strip().lower()
 
@@ -114,9 +114,8 @@ def api_set_settings():
     return jsonify({"llm_provider": provider})
 
 
-# ══════════════════════════════════════════════════════════════════════
+
 #  GAME
-# ══════════════════════════════════════════════════════════════════════
 
 @app.route("/api/start", methods=["POST"])
 @require_auth
@@ -140,7 +139,7 @@ def api_start():
     gs = get_or_create_state(user_id)
     ep = gs.current_ep()
 
-    # ── กลับมากลางคัน: ดึง raw turns แทน intro ──
+    # ── กลับมากลางคัน:ดึงraw turnsแทนintro ──
     is_resuming = gs.turn > 0
     raw_turns   = get_turns(user_id, gs.current_ep_id) if is_resuming else []
 
@@ -165,19 +164,20 @@ def api_start():
 def api_talk():
     user_id  = request.user_id
     text     = (request.json or {}).get("text", "").strip()
-    username = (request.json or {}).get("username", "ผู้เล่น")
+    # FIX: ดึง username จาก DB ไม่ใช่รับจาก client body
+    username = get_username(user_id) or "ผู้เล่น"
     print(f"[TALK] user={user_id[:8]} text={repr(text[:40])}", flush=True)
     if not text:
         return jsonify({"error": "empty input"}), 400
 
     try:
         gs = get_or_create_state(user_id)
-        print(f"[TALK] state ok — ep={gs.current_ep_id} provider={gs.llm_provider}", flush=True)
+        print(f"[TALK] state ok - ep={gs.current_ep_id} provider={gs.llm_provider}", flush=True)
 
-        gs.llm_provider = get_llm_setting(user_id)
+        # ไม่จำเป็นต้อง query DB ทุก request - อัปเดตเฉพาะตอน POST /api/settings
 
         result = gs.process_turn(text)
-        print(f"[TALK] process_turn ok — mood={result.get('mood')} reaction={repr(result.get('reaction','')[:40])}", flush=True)
+        print(f"[TALK] process_turn ok - mood={result.get('mood')} reaction={repr(result.get('reaction','')[:40])}", flush=True)
 
         save_game_state(user_id, gs)
         result["username"] = username
@@ -217,8 +217,9 @@ def api_gift():
 
 
 @app.route("/api/bg", methods=["POST"])
+@require_auth 
 def api_bg():
-    """สร้าง background ผ่าน Novita AI — คืนรูปตรงๆ ไม่มี queue"""
+    """สร้าง background ผ่าน Novita AI - คืนรูปตรงๆ ไม่มี queue"""
     prompt = (request.json or {}).get("prompt", "").strip()
     if not prompt:
         return jsonify({"error": "prompt required"}), 400
@@ -229,6 +230,57 @@ def api_bg():
 
     img_b64 = base64.b64encode(img_bytes).decode("utf-8")
     return jsonify({"image": f"data:image/png;base64,{img_b64}"})
+
+
+#  DEBUG
+
+
+@app.route("/api/debug/skip", methods=["POST"])
+@require_auth
+def api_debug_skip():
+    """
+    ข้าม EP ไปยัง EP ที่ต้องการ
+    Body: { "ep": "EP6_WARM_A", "route": "WARM", "ap": 80, "tp": 80 }
+    ใช้จาก console: 
+      fetch('/api/debug/skip', {method:'POST', headers:{'Content-Type':'application/json', 'Authorization':'Bearer <token>'}, body: JSON.stringify({ep:'EP6_WARM_A', route:'WARM'})})
+    """
+    if os.environ.get("FLASK_ENV") == "production":
+        return jsonify({"error": "ไม่อนุญาตใน production"}), 403
+
+    body    = request.json or {}
+    ep      = body.get("ep", "EP6_WARM_A")
+    route   = body.get("route", "WARM")
+    ap      = int(body.get("ap", 80))
+    tp      = int(body.get("tp", 80))
+
+    from game.config import EPISODES
+    if ep not in EPISODES:
+        return jsonify({"error": f"ไม่พบ EP: {ep}", "valid": list(EPISODES.keys())}), 400
+
+    user_id = request.user_id
+    gs = get_or_create_state(user_id)
+    gs.current_ep_id = ep
+    gs.route         = route
+    gs.ap            = ap
+    gs.tp            = tp
+    gs.turn          = 0
+    gs.mood_counter  = 0
+    gs.game_over     = False
+
+    save_game_state(user_id, gs)
+
+    ep_data = gs.current_ep()
+    return jsonify({
+        "ok"           : True,
+        "episode"      : gs.current_ep_id,
+        "episode_label": gs.episode_label(),
+        "route"        : gs.route,
+        "ap"           : gs.ap,
+        "tp"           : gs.tp,
+        "bg_prompt"    : ep_data.get("bg_prompt", ""),
+        "intro_text"   : ep_data.get("fern_intro", ""),
+    })
+
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
